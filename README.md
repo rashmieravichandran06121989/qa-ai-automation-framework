@@ -244,6 +244,3 @@ Add `APPLITOOLS_API_KEY` as a repository secret to enable visual regression chec
 
 ---
 
-## License
-
-MIT
