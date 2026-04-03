@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx playwright:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(grep -v \"^--$\")",
+      "Bash(npm install:*)",
+      "Bash(node -e \"const p = require\\(''playwright-bdd/package.json''\\); console.log\\(p.version\\)\")",
+      "Bash(node -e \"const {defineBddConfig} = require\\(''playwright-bdd''\\); const c = defineBddConfig\\({features:''features/**/*.feature'', steps:''steps/**/*.ts''}\\); console.log\\(JSON.stringify\\({testDir: c.testDir, testMatch: c.testMatch}, null, 2\\)\\)\")",
+      "Bash(node -e \"const pb = require\\(''playwright-bdd''\\); console.log\\(Object.keys\\(pb\\)\\)\")",
+      "Bash(npx bddgen:*)",
+      "WebFetch(domain:api.practicesoftwaretesting.com)"
+    ]
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "applitools-playwright-smoke-tests",
+  "version": "1.0.0",
+  "description": "Playwright TypeScript smoke test suite with Applitools Eyes for practicesoftwaretesting.com",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:smoke": "npx playwright test tests/smoke",
+    "test:headed": "npx playwright test --headed",
+    "test:report": "npx playwright show-report",
+    "test:bdd": "npx playwright test --project='bdd:chromium'",
+    "test:bdd:headed": "npx playwright test --project='bdd:chromium' --headed",
+    "test:api": "npx playwright test --project=api",
+    "test:api:verbose": "npx playwright test --project=api --reporter=list"
+  },
+  "devDependencies": {
+    "@faker-js/faker": "^10.4.0",
+    "@playwright/test": "^1.44.0",
+    "@types/node": "^20.0.0",
+    "dotenv": "^17.3.1",
+    "playwright-bdd": "^8.5.0",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "@applitools/eyes-playwright": "^1.37.0"
+  }
+}
