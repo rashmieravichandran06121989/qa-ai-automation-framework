@@ -146,7 +146,8 @@ A `.github/copilot-instructions.md` file teaches Copilot the project's conventio
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/rashmieravichandran06121989/playwright-demo.git
+git clone https://github.com/rashmieravichandran06121989/qa-ai-automation-framework.git
+cd qa-ai-automation-framework
 cd playwright-democd applitools-playwright-demo
 npm install
 
