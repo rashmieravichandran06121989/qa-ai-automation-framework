@@ -146,8 +146,8 @@ A `.github/copilot-instructions.md` file teaches Copilot the project's conventio
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/<your-username>/applitools-playwright-demo.git
-cd applitools-playwright-demo
+git clone https://github.com/rashmieravichandran06121989/playwright-demo.git
+cd playwright-democd applitools-playwright-demo
 npm install
 
 # 2. Install Playwright browsers
