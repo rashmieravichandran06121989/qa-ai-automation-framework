@@ -1,6 +1,6 @@
 # Playwright + Applitools Eyes — Quality Engineering Demo
 
-![CI](https://github.com/rashmieravichandran06121989/applitools-playwright-demo/actions/workflows/playwright.yml/badge.svg)
+![CI](https://github.com/rashmieravichandran06121989/playwright-demo.git)
 ![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)
 ![Playwright](https://img.shields.io/badge/playwright-1.44-blue)
 ![Applitools](https://img.shields.io/badge/applitools-eyes--playwright-orange)
