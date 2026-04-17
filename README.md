@@ -1,5 +1,7 @@
 # Playwright + Applitools Eyes — Quality Engineering Demo
 
+Built as part of my Quality Engineering upskill journey — demonstrating how AI tools (Applitools visual AI + GitHub Copilot) can be integrated into a production-grade test framework to catch regressions that traditional assertions miss. This is the kind of framework I design and own in my current role at Arrive.
+
 ![CI](https://github.com/rashmieravichandran06121989/playwright-demo.git)
 ![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)
 ![Playwright](https://img.shields.io/badge/playwright-1.44-blue)
