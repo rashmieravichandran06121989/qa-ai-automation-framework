@@ -221,15 +221,6 @@ Add `APPLITOOLS_API_KEY` as a repository secret to enable visual regression chec
 └── .env.example                 # Environment variable template
 ```
 
----
-
-## Screenshots
-
-> _Run the suite and drop screenshots into `docs/screenshots/` — see the [guide](docs/screenshots/README.md)._
-
-| Playwright HTML Report | Applitools Dashboard | Visual Diff |
-|------------------------|---------------------|------------|
-| _(add screenshot)_ | _(add screenshot)_ | _(add screenshot)_ |
 
 ---
 
