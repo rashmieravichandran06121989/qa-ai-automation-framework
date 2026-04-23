@@ -4,6 +4,12 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 const isCI = !!process.env.CI;
+// Allow overriding the base URL so CI can point at a locally-hosted copy
+// of the demo app (avoiding the Cloudflare bot challenge that blocks
+// GitHub Actions IPs on the public site).
+const BASE_URL = process.env.BASE_URL || 'https://practicesoftwaretesting.com';
+const API_BASE_URL =
+  process.env.API_BASE_URL || 'https://api.practicesoftwaretesting.com';
 
 export default defineConfig({
   testDir: './tests',
@@ -28,7 +34,7 @@ export default defineConfig({
     ['list'],
   ],
   use: {
-    baseURL: 'https://practicesoftwaretesting.com',
+    baseURL: BASE_URL,
     headless: true,
     viewport: { width: 1280, height: 720 },
     screenshot: 'only-on-failure',
@@ -60,7 +66,7 @@ export default defineConfig({
       name: 'api',
       testDir: './tests/APITests',
       use: {
-        baseURL: 'https://api.practicesoftwaretesting.com',
+        baseURL: API_BASE_URL,
       },
     },
   ],
