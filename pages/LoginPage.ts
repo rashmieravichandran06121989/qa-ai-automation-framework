@@ -28,15 +28,29 @@ export class LoginPage extends BasePage {
   async login(email: string, password: string): Promise<void> {
     await this.emailInput.fill(email);
     await this.passwordInput.fill(password);
+
+    // Wait for the POST /users/login response in addition to the URL/error
+    // race. The demo backend can take 20+ seconds in CI, and without this
+    // the Angular route change may happen after our URL check has already
+    // given up. 30s matches the CI expect timeout.
+    const loginResponsePromise = this.page
+      .waitForResponse(
+        (res) => /\/users\/login/.test(res.url()) && res.request().method() === 'POST',
+        { timeout: 30_000 },
+      )
+      .catch(() => null);
+
     await this.loginButton.click();
+    await loginResponsePromise;
 
     // The app is an Angular SPA, so `waitForLoadState('load')` doesn't fire
-    // on client-side navigation. Instead, race the successful URL change
-    // against the appearance of a login error banner so we can surface a
-    // meaningful failure immediately (e.g. "Account locked").
+    // on client-side navigation. Race the successful URL change against
+    // the appearance of a login error banner so we can surface a clear
+    // failure immediately (e.g. "Account locked") instead of a generic
+    // URL-timeout further down the chain.
     await Promise.race([
-      this.page.waitForURL((url) => !/\/auth\/login/.test(url.toString()), { timeout: 10_000 }),
-      this.errorMessage.waitFor({ state: 'visible', timeout: 10_000 }),
+      this.page.waitForURL((url) => !/\/auth\/login/.test(url.toString()), { timeout: 30_000 }),
+      this.errorMessage.waitFor({ state: 'visible', timeout: 30_000 }),
     ]).catch(() => {
       // Swallow the race rejection; the checks below produce a clearer error.
     });

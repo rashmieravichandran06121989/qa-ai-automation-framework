@@ -8,14 +8,21 @@ const isCI = !!process.env.CI;
 export default defineConfig({
   testDir: './tests',
   // CI runners are resource-constrained and the demo backend is shared,
-  // so give tests more headroom when running in CI to avoid flaky timeouts.
-  timeout: isCI ? 90_000 : 60_000,
-  expect: { timeout: isCI ? 20_000 : 10_000 },
+  // so give tests substantially more headroom in CI to avoid timeouts
+  // when the demo site is slow from GitHub's network.
+  timeout: isCI ? 180_000 : 60_000,
+  expect: { timeout: isCI ? 30_000 : 10_000 },
   fullyParallel: true,
+  // Two retries in CI. The practicesoftwaretesting.com demo backend is
+  // shared infrastructure and transiently drops requests; a second retry
+  // meaningfully reduces false-red runs without adding too much wall time
+  // (workers=1 caps the blast radius of any one retry).
   retries: isCI ? 2 : 1,
-  // 5 workers saturates a 2-vCPU GitHub runner and slows every render,
-  // which is what was timing out the cart tests. Stay parallel but modest.
-  workers: isCI ? 2 : 5,
+  // Serial in CI: parallel workers all compete for the shared demo backend
+  // (practicesoftwaretesting.com). When two cart tests hit it at once the
+  // API can take 60+s, stranding /checkout mid-render. Serial costs ~30s
+  // extra wall-clock but eliminates that contention entirely.
+  workers: isCI ? 1 : 5,
   reporter: [
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
     ['list'],
@@ -27,6 +34,10 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     trace: 'on-first-retry',
+    // Give individual actions and page.goto more time in CI where the demo
+    // site can take a long time to respond.
+    actionTimeout: isCI ? 30_000 : 15_000,
+    navigationTimeout: isCI ? 60_000 : 30_000,
   },
   projects: [
     // ── UI smoke tests ──────────────────────────────────────────────────────

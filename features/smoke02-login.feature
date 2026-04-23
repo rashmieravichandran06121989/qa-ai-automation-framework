@@ -5,5 +5,5 @@ Feature: User Authentication
 
   Scenario: User can log in with valid credentials
     Given I am on the login page
-    When I log in with email "customer3@practicesoftwaretesting.com" and password "pass123"
+    When I log in with email "customer@practicesoftwaretesting.com" and password "welcome01"
     Then I should be redirected away from the login page

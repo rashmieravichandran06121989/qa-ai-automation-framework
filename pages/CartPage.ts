@@ -27,52 +27,37 @@ export class CartPage extends BasePage {
 
   async open(cartId?: string): Promise<void> {
     if (cartId) {
-      // Inject cart_id into sessionStorage before navigating.
-      // The Angular app reads cart_id from sessionStorage to know which
-      // cart to fetch on /checkout. In CI (headless + cold context) the
-      // app's own setItem can race with the navigation, so we set it
-      // explicitly to guarantee the cart_id is present before /checkout
-      // boots up.
-      await this.page.evaluate((id) => {
+      // Inject cart_id via addInitScript so it runs BEFORE Angular boots
+      // on /checkout — eliminates the race where Angular reads
+      // sessionStorage before our evaluate() call lands. This is the key
+      // fix for CI, where a cold /checkout load can otherwise race the
+      // cart_id write and leave the page stuck loading forever.
+      await this.page.addInitScript((id) => {
         try {
           window.sessionStorage.setItem('cart_id', id);
         } catch {
-          // Ignore storage errors on about:blank — the subsequent navigation
-          // will still work because the app sets cart_id itself on addToCart.
+          // Storage access failures are non-fatal — the app also sets
+          // cart_id on its own during addToCart.
         }
       }, cartId);
     }
 
-    // Race navigation with the cart-detail API response so we know the
-    // cart has finished loading before callers assert on its contents.
-    // Falls back to domcontentloaded if the API call never fires (e.g. an
-    // empty cart short-circuits the request).
-    const cartApiResponse = this.page
-      .waitForResponse(
-        (res) =>
-          /\/carts\//.test(res.url()) && res.request().method() === 'GET',
-        { timeout: 30_000 },
-      )
-      .catch(() => null);
-
     await this.navigate('/checkout');
-    await this.page.waitForLoadState('domcontentloaded');
-    await cartApiResponse;
+
+    // Single wait budget: either the first cart row becomes visible, or
+    // the empty-cart banner does. Whichever arrives first resolves the
+    // race and lets callers assert without stacking extra timeouts.
+    await Promise.race([
+      this.cartItems.first().waitFor({ state: 'visible', timeout: 45_000 }),
+      this.emptyCartMessage.waitFor({ state: 'visible', timeout: 45_000 }),
+    ]).catch(() => {
+      // Neither arrived — callers will surface a descriptive failure.
+    });
   }
 
   async getCartItemCount(): Promise<number> {
-    // Cart items are fetched from the API after Angular bootstraps.
-    // Race the first cart row against the empty-cart notice so we can
-    // return 0 immediately when the cart is legitimately empty instead
-    // of burning the full timeout waiting for a row that will never appear.
-    await Promise.race([
-      this.cartItems.first().waitFor({ state: 'visible', timeout: 30_000 }),
-      this.emptyCartMessage.waitFor({ state: 'visible', timeout: 30_000 }),
-    ]).catch(() => {
-      // Both locators timed out — fall through and let count() return 0 so
-      // the caller can assert and produce a descriptive failure.
-    });
-
+    // Cheap check: open() has already waited for the cart to settle, so
+    // here we just report the current state without additional waiting.
     if (await this.emptyCartMessage.isVisible().catch(() => false)) {
       return 0;
     }
