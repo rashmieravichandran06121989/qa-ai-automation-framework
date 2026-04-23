@@ -24,7 +24,23 @@ When('I navigate to the cart page', async ({ cartPage }) => {
 });
 
 Then('the cart should contain at least {int} item', async ({ cartPage }, n: number) => {
-  await cartPage.cartItems.first().waitFor({ state: 'visible', timeout: 20_000 });
+  // Race cart row vs. empty-cart notice so we surface a clear failure
+  // ("Cart rendered empty") instead of a generic 20s locator timeout when
+  // the cart_id wasn't persisted or the checkout API call failed.
+  await Promise.race([
+    cartPage.cartItems.first().waitFor({ state: 'visible', timeout: 30_000 }),
+    cartPage.emptyCartMessage.waitFor({ state: 'visible', timeout: 30_000 }),
+  ]).catch(() => {
+    // Both timed out — let the count assertion below produce the error.
+  });
+
+  if (await cartPage.emptyCartMessage.isVisible().catch(() => false)) {
+    throw new Error(
+      'Cart rendered empty on /checkout — the cart_id was likely not ' +
+        'persisted in sessionStorage, or the GET /carts/{id} API call failed.',
+    );
+  }
+
   const count = await cartPage.getCartItemCount();
   expect(count).toBeGreaterThanOrEqual(n);
 });

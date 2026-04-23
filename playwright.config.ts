@@ -3,13 +3,19 @@ import { defineBddProject } from 'playwright-bdd';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
+const isCI = !!process.env.CI;
+
 export default defineConfig({
   testDir: './tests',
-  timeout: 60_000,
-  expect: { timeout: 10_000 },
+  // CI runners are resource-constrained and the demo backend is shared,
+  // so give tests more headroom when running in CI to avoid flaky timeouts.
+  timeout: isCI ? 90_000 : 60_000,
+  expect: { timeout: isCI ? 20_000 : 10_000 },
   fullyParallel: true,
-  retries: 1,
-  workers: 5,
+  retries: isCI ? 2 : 1,
+  // 5 workers saturates a 2-vCPU GitHub runner and slows every render,
+  // which is what was timing out the cart tests. Stay parallel but modest.
+  workers: isCI ? 2 : 5,
   reporter: [
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
     ['list'],

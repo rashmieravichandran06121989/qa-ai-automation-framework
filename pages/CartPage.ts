@@ -29,24 +29,52 @@ export class CartPage extends BasePage {
     if (cartId) {
       // Inject cart_id into sessionStorage before navigating.
       // The Angular app reads cart_id from sessionStorage to know which
-      // cart to fetch on /checkout. Playwright does not persist sessionStorage
-      // between navigations — without this the cart renders empty in CI.
+      // cart to fetch on /checkout. In CI (headless + cold context) the
+      // app's own setItem can race with the navigation, so we set it
+      // explicitly to guarantee the cart_id is present before /checkout
+      // boots up.
       await this.page.evaluate((id) => {
-        window.sessionStorage.setItem('cart_id', id);
+        try {
+          window.sessionStorage.setItem('cart_id', id);
+        } catch {
+          // Ignore storage errors on about:blank — the subsequent navigation
+          // will still work because the app sets cart_id itself on addToCart.
+        }
       }, cartId);
     }
+
+    // Race navigation with the cart-detail API response so we know the
+    // cart has finished loading before callers assert on its contents.
+    // Falls back to domcontentloaded if the API call never fires (e.g. an
+    // empty cart short-circuits the request).
+    const cartApiResponse = this.page
+      .waitForResponse(
+        (res) =>
+          /\/carts\//.test(res.url()) && res.request().method() === 'GET',
+        { timeout: 30_000 },
+      )
+      .catch(() => null);
+
     await this.navigate('/checkout');
     await this.page.waitForLoadState('domcontentloaded');
+    await cartApiResponse;
   }
 
   async getCartItemCount(): Promise<number> {
     // Cart items are fetched from the API after Angular bootstraps.
-    // Wait for the first item to appear; if none arrive within the timeout
-    // the cart is genuinely empty and we return 0.
-    try {
-      await this.cartItems.first().waitFor({ state: 'visible', timeout: 15_000 });
-    } catch {
-      // Genuine empty cart – fall through and return 0
+    // Race the first cart row against the empty-cart notice so we can
+    // return 0 immediately when the cart is legitimately empty instead
+    // of burning the full timeout waiting for a row that will never appear.
+    await Promise.race([
+      this.cartItems.first().waitFor({ state: 'visible', timeout: 30_000 }),
+      this.emptyCartMessage.waitFor({ state: 'visible', timeout: 30_000 }),
+    ]).catch(() => {
+      // Both locators timed out — fall through and let count() return 0 so
+      // the caller can assert and produce a descriptive failure.
+    });
+
+    if (await this.emptyCartMessage.isVisible().catch(() => false)) {
+      return 0;
     }
     return this.cartItems.count();
   }
