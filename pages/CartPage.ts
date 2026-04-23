@@ -25,8 +25,18 @@ export class CartPage extends BasePage {
     this.quantityInputs          = page.locator('[data-test="product-quantity"]');
   }
 
-  async open(): Promise<void> {
+  async open(cartId?: string): Promise<void> {
+    if (cartId) {
+      // Inject cart_id into sessionStorage before navigating.
+      // The Angular app reads cart_id from sessionStorage to know which
+      // cart to fetch on /checkout. Playwright does not persist sessionStorage
+      // between navigations — without this the cart renders empty in CI.
+      await this.page.evaluate((id) => {
+        window.sessionStorage.setItem('cart_id', id);
+      }, cartId);
+    }
     await this.navigate('/checkout');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async getCartItemCount(): Promise<number> {
