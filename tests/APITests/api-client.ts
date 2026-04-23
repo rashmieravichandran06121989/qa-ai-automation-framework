@@ -83,7 +83,7 @@ export class ApiClient {
   // ── Auth ────────────────────────────────────────────────────────────────
 
   login(email: string, password: string) {
-    return this.request.post(`${API_BASE}/auth/login`, {
+    return this.request.post(`${API_BASE}/users/login`, {
       data: { email, password },
       headers: this.headers(),
     });

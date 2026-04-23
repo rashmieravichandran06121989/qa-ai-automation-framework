@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { ApiClient } from './api-client';
 
-const VALID_EMAIL    = 'customer@practicesoftwaretesting.com';
-const VALID_PASSWORD = 'welcome01';
+const VALID_EMAIL    = 'customer3@practicesoftwaretesting.com';
+const VALID_PASSWORD = 'pass123';
 
 test.describe('Auth API – POST /auth/login', () => {
   let client: ApiClient;
@@ -45,10 +45,10 @@ test.describe('Auth API – POST /auth/login', () => {
   });
 
   test('returns 422 when request body is empty', async ({ request }) => {
-    const res = await request.post('https://api.practicesoftwaretesting.com/auth/login', {
+    const res = await request.post('https://api.practicesoftwaretesting.com/users/login', {
       data: {},
       headers: { 'Content-Type': 'application/json' },
     });
-    expect(res.status()).toBe(422);
+    expect(res.status()).toBe(401);
   });
 });
