@@ -7,7 +7,7 @@
     "test:smoke": "npx playwright test tests/smoke",
     "test:headed": "npx playwright test --headed",
     "test:report": "npx playwright show-report",
-    "test:bdd": "npx playwright test --project='bdd:chromium'",
+    "test:bdd": "npx bddgen && npx playwright test --project='bdd:chromium'",
     "test:bdd:headed": "npx playwright test --project='bdd:chromium' --headed",
     "test:api": "npx playwright test --project=api",
     "test:api:verbose": "npx playwright test --project=api --reporter=list"
