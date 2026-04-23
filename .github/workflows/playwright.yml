@@ -10,7 +10,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout tests
@@ -19,8 +19,8 @@ jobs:
       # The public demo site (practicesoftwaretesting.com) sits behind
       # Cloudflare, which shows a bot-challenge interstitial to requests
       # from GitHub Actions runner IPs. That challenge page replaces the
-      # real Angular SPA, so UI selectors never resolve and the cart tests
-      # fail with "Cart contained 0 items". To avoid this entirely, we
+      # real Angular SPA, so UI selectors never resolve and tests fail
+      # with "Cart contained 0 items" (or similar). To avoid this, we
       # run the application locally in CI via its official docker-compose
       # stack and point the tests at http://localhost:4200.
       - name: Checkout demo app
@@ -33,36 +33,58 @@ jobs:
       - name: Start demo app via docker compose
         working-directory: demo-app
         run: |
-          docker compose -f docker-compose.yml up -d
+          # The repo's own .env sets SPRINT=sprint5 which the compose file
+          # interpolates into volume paths. Nothing extra needed.
+          docker compose up -d
           docker compose ps
 
-      - name: Wait for demo app to be ready
+      # The laravel-api image shares /var/www with a one-shot `composer`
+      # service that installs PHP dependencies. `php artisan` will fail
+      # until composer finishes, and the DB container also needs time to
+      # initialise. Retry the seed until both prerequisites are ready.
+      - name: Run database migrations and seed
+        working-directory: demo-app
+        timeout-minutes: 10
         run: |
-          echo "Waiting for backend on http://localhost:8091 ..."
-          for i in $(seq 1 90); do
-            if curl -fsS http://localhost:8091/status >/dev/null 2>&1 \
-               || curl -fsS http://localhost:8091/api/status >/dev/null 2>&1 \
-               || curl -fsS http://localhost:8091 >/dev/null 2>&1; then
-              echo "Backend responded after ${i} attempts"
-              break
+          echo "Seeding database (this also proves composer install + MariaDB are ready)..."
+          for i in $(seq 1 40); do
+            echo "--- Attempt ${i} ---"
+            if docker compose exec -T laravel-api php artisan migrate:fresh --seed --force; then
+              echo "Seed completed on attempt ${i}"
+              exit 0
             fi
-            sleep 5
+            sleep 15
           done
+          echo "Seed never succeeded"
+          docker compose logs --tail=200 composer laravel-api mariadb
+          exit 1
 
-          echo "Waiting for frontend on http://localhost:4200 ..."
+      # The angular-ui container runs `npm install --force && ng serve`
+      # from scratch, which takes 3-5 minutes on first boot. Be patient.
+      - name: Wait for frontend to serve
+        timeout-minutes: 8
+        run: |
+          echo "Waiting for http://localhost:4200 to respond..."
           for i in $(seq 1 90); do
             if curl -fsS http://localhost:4200 >/dev/null 2>&1; then
               echo "Frontend responded after ${i} attempts"
-              break
+              exit 0
             fi
             sleep 5
           done
+          echo "Frontend never came up"
+          exit 1
 
-          # Final sanity check — fail the job early if either is still down.
-          curl -fsS -o /dev/null http://localhost:4200
-          curl -fsS -o /dev/null http://localhost:8091 \
-            || curl -fsS -o /dev/null http://localhost:8091/status \
-            || curl -fsS -o /dev/null http://localhost:8091/api/status
+      - name: Verify backend has seeded data
+        run: |
+          echo "Fetching /products from http://localhost:8091 ..."
+          RESP=$(curl -fsS "http://localhost:8091/products?page=1" || echo "")
+          echo "Response preview (first 500 chars): ${RESP:0:500}"
+          if ! echo "$RESP" | grep -q '"id"'; then
+            echo "ERROR: /products returned no items — seed did not populate products"
+            exit 1
+          fi
+          echo "Seeded products confirmed"
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
@@ -81,12 +103,12 @@ jobs:
           BASE_URL: http://localhost:4200
           API_BASE_URL: http://localhost:8091
         run: npm run test:bdd
-        timeout-minutes: 15
+        timeout-minutes: 20
 
       - name: Dump demo app logs on failure
         if: failure()
         working-directory: demo-app
-        run: docker compose logs --tail=300
+        run: docker compose logs --tail=400
 
       - name: Teardown demo app
         if: always()
