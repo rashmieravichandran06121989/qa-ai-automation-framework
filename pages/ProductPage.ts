@@ -46,8 +46,26 @@ export class ProductPage extends BasePage {
       this.addToCartButton.click(),
     ]);
 
-    const cartBody = await cartResponse.json();
+    // Verify the POST actually succeeded. Silently-failing POSTs were the
+    // root cause of the CI flake: the UI badge can update from client-side
+    // state even when the server rejects the cart, leaving /checkout with
+    // no backing record.
+    const status = cartResponse.status();
+    if (status < 200 || status >= 300) {
+      const body = await cartResponse.text().catch(() => '<unreadable>');
+      throw new Error(
+        `POST /carts failed with status ${status}. Body: ${body.slice(0, 500)}`,
+      );
+    }
+
+    const cartBody = await cartResponse.json().catch(() => ({}));
     const cartId: string = cartBody.id ?? cartBody.cart_id ?? '';
+    if (!cartId) {
+      throw new Error(
+        `POST /carts returned status ${status} but no cart id. ` +
+          `Body: ${JSON.stringify(cartBody).slice(0, 500)}`,
+      );
+    }
 
     await this.page.locator('[data-test="cart-quantity"]').waitFor({
       state: 'visible',

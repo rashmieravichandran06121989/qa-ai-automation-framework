@@ -57,6 +57,11 @@ export class HomePage extends BasePage {
   }
 
   async clickProductByIndex(index: number): Promise<void> {
+    // Products load async after the page loads. Wait for the target card
+    // to actually exist before clicking — otherwise a slow grid render
+    // (common in CI) causes nth(index) to time out looking for a card
+    // that hasn't arrived yet.
+    await this.productCards.nth(index).waitFor({ state: 'visible', timeout: 30_000 });
     await this.productCards.nth(index).click();
     await this.page.waitForLoadState('load');
   }

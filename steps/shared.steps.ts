@@ -35,5 +35,36 @@ Then('the cart should contain at least {int} item', async ({ cartPage, page }, n
   }
 
   const count = await cartPage.getCartItemCount();
+  if (count < n) {
+    // Dump diagnostics so CI logs contain enough to debug without needing
+    // the trace.zip artifact. This is the hardest fail-mode to diagnose
+    // because neither the rows nor the empty-cart banner are visible.
+    const diag = await page.evaluate(() => {
+      const pick = (sel: string) =>
+        Array.from(document.querySelectorAll(sel))
+          .map((el) => (el as HTMLElement).innerText?.trim().slice(0, 80))
+          .filter(Boolean);
+      return {
+        url: location.href,
+        sessionStorage: { ...window.sessionStorage },
+        localStorage: { ...window.localStorage },
+        productTitles: pick('[data-test="product-title"]'),
+        rowCount: document.querySelectorAll('tr').length,
+        anyDataTests: Array.from(
+          new Set(
+            Array.from(document.querySelectorAll('[data-test]')).map((e) =>
+              e.getAttribute('data-test'),
+            ),
+          ),
+        ).sort(),
+        bodyPreview: document.body?.innerText?.slice(0, 600),
+      };
+    }).catch((e) => ({ error: String(e) }));
+
+    throw new Error(
+      `Cart contained ${count} items, expected >= ${n}. ` +
+        `Diagnostic:\n${JSON.stringify(diag, null, 2)}`,
+    );
+  }
   expect(count).toBeGreaterThanOrEqual(n);
 });

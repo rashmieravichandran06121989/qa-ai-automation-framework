@@ -42,7 +42,33 @@ export class CartPage extends BasePage {
       }, cartId);
     }
 
+    // Wait for the cart-detail GET in parallel with the navigation so we
+    // can confirm the backing API actually returned the cart. On CI this
+    // is frequently the point where the demo backend drops the request
+    // and we end up with an empty-looking /checkout page.
+    const cartGet = cartId
+      ? this.page
+          .waitForResponse(
+            (res) =>
+              res.url().includes(`/carts/${cartId}`) &&
+              res.request().method() === 'GET',
+            { timeout: 45_000 },
+          )
+          .catch(() => null)
+      : Promise.resolve(null);
+
     await this.navigate('/checkout');
+
+    const resp = await cartGet;
+    if (resp && !resp.ok()) {
+      // Surface backend failure early — otherwise we'd wait another 45s
+      // staring at a blank cart.
+      const body = await resp.text().catch(() => '<unreadable>');
+      throw new Error(
+        `GET /carts/${cartId} failed with status ${resp.status()}. ` +
+          `Body: ${body.slice(0, 400)}`,
+      );
+    }
 
     // Single wait budget: either the first cart row becomes visible, or
     // the empty-cart banner does. Whichever arrives first resolves the
