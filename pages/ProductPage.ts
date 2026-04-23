@@ -25,7 +25,7 @@ export class ProductPage extends BasePage {
     this.relatedProducts    = page.locator('[data-test="related-product"]');
   }
 
-  async addToCart(quantity = 1): Promise<void> {
+  async addToCart(quantity = 1): Promise<string> {
     // Wait for the button to be enabled – it is disabled for out-of-stock items
     await this.addToCartButton.waitFor({ state: 'visible' });
     await expect(this.addToCartButton).toBeEnabled({ timeout: 10_000 });
@@ -33,15 +33,29 @@ export class ProductPage extends BasePage {
     if (quantity > 1) {
       await this.quantityInput.fill(String(quantity));
     }
-    await this.addToCartButton.click();
 
-    // Wait for the cart badge to appear in the nav, confirming the add succeeded
+    // Intercept POST /carts to capture cart_id before clicking.
+    // The app stores cart_id in sessionStorage — which Playwright does not
+    // persist between navigations. We capture it here and inject it manually
+    // in CartPage.open() so /checkout loads the correct cart in CI.
+    const [cartResponse] = await Promise.all([
+      this.page.waitForResponse(
+        res => res.url().includes('/carts') && res.request().method() === 'POST',
+        { timeout: 30_000 }
+      ),
+      this.addToCartButton.click(),
+    ]);
+
+    const cartBody = await cartResponse.json();
+    const cartId: string = cartBody.id ?? cartBody.cart_id ?? '';
+
     await this.page.locator('[data-test="cart-quantity"]').waitFor({
       state: 'visible',
-      timeout: 10_000,
+      timeout: 30_000,
     });
-  }
 
+    return cartId;
+  }
   async getProductName(): Promise<string> {
     return (await this.productName.textContent()) ?? '';
   }
