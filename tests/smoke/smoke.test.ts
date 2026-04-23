@@ -18,8 +18,8 @@ const eyesConfig = buildEyesConfig();
 const VISUAL_ENABLED = !!process.env.APPLITOOLS_API_KEY;
 
 // Test credentials provided by practicesoftwaretesting.com
-const VALID_EMAIL    = 'customer@practicesoftwaretesting.com';
-const VALID_PASSWORD = 'welcome01';
+const VALID_EMAIL    = 'customer3@practicesoftwaretesting.com';
+const VALID_PASSWORD = 'pass123';
 
 // ---------------------------------------------------------------------------
 // Smoke Test 1 – Homepage loads and renders correctly
