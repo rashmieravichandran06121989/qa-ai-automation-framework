@@ -226,7 +226,7 @@ jobs:
     steps:
       - name: Slack ping
         if: ${{ env.SLACK_WEBHOOK_URL != '' }}
-        uses: slackapi/slack-github-action@v1.26.0
+        uses: slackapi/slack-github-action@v1.27.1
         with:
           payload: |
             {
