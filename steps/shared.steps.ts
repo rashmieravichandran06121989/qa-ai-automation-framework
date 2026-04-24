@@ -1,9 +1,11 @@
 import { Given } from '../fixtures';
-import { env } from '../config/env';
 import { credentials } from '../config/credentials';
 
 // High-level steps shared across both targets. Anything specific to
 // one target lives under steps/saucedemo/ or steps/orangehrm/.
+
+const ORANGEHRM_BASE_URL =
+  process.env.ORANGEHRM_BASE_URL ?? 'https://opensource-demo.orangehrmlive.com';
 
 Given(
   'User is logged in to SauceDemo as {string}',
@@ -24,24 +26,16 @@ Given(
 Given(
   'User is logged in to OrangeHRM as {string}',
   async ({ page, orangeLoginPage, orangeDashboardPage }, username: string) => {
-    // Fast path — storageState (wired at project level) gives the
-    // context Admin's cookies. Hit /dashboard/index directly and skip
-    // UI login when the session is still valid. Saves ~15s per scenario.
+    // Fast path — storageState (wired at project level) seeds Admin's
+    // cookies. Hit /dashboard/index and skip UI login if the session
+    // is still valid. Saves ~15s per scenario.
     const isAdmin = username === credentials.orangeHRM.admin.username;
     if (isAdmin) {
-      await page.goto(
-        `${env.ORANGEHRM_BASE_URL}/web/index.php/dashboard/index`,
-      );
-      // 8s gives OrangeHRM enough time to paint the Dashboard heading
-      // on a cold context. 3s was racing the render and falling
-      // through to UI login even when storageState was valid, which
-      // caused downstream flake in PIM nav.
+      await page.goto(`${ORANGEHRM_BASE_URL}/web/index.php/dashboard/index`);
       if (await orangeDashboardPage.isLoaded(8_000)) return;
     }
 
-    // Cookie jar missing, empty, or session rotated — fall through to
-    // UI login. openLoginPage's open() clears any stale dashboard
-    // redirect before filling the form.
+    // Cookie jar missing or session rotated — fall through to UI login.
     await orangeLoginPage.open();
     const password = isAdmin ? credentials.orangeHRM.admin.password : '';
     await orangeLoginPage.loginAs(username, password);

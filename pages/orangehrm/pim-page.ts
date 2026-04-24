@@ -57,22 +57,14 @@ export class OrangePIMPage extends BasePage {
   }
 
   async addEmployee(employee: EmployeeInput): Promise<void> {
-    // Wrapped in `step()` so Allure shows "Add employee: <first> <last>"
-    // as a named step with an auto-screenshot on failure — beats scanning
-    // a flat function-name dump when a scenario fails here.
-    await this.step(
-      `Add employee: ${employee.firstName} ${employee.lastName}`,
-      async () => {
-        await this.firstNameInput.fill(employee.firstName);
-        await this.lastNameInput.fill(employee.lastName);
-        if (employee.employeeId) {
-          await this.employeeIdInput.fill(employee.employeeId);
-        }
-        await this.saveButton.click();
-        // Redirects to /pim/viewPersonalDetails/empNumber/XXX on success.
-        await this.waitForVisible(this.personalDetailsHeader, 20_000);
-      },
-    );
+    await this.firstNameInput.fill(employee.firstName);
+    await this.lastNameInput.fill(employee.lastName);
+    if (employee.employeeId) {
+      await this.employeeIdInput.fill(employee.employeeId);
+    }
+    await this.saveButton.click();
+    // Redirects to /pim/viewPersonalDetails/empNumber/XXX on success.
+    await this.waitForVisible(this.personalDetailsHeader, 20_000);
   }
 
   async goToEmployeeList(): Promise<void> {

@@ -1,9 +1,0 @@
-# Every path in this repo — current owner is the author. Update when a
-# team picks this up so reviews route automatically.
-*                               @rashmieravichandran06121989
-
-# Security-sensitive surface (CI, secrets allowlist, Applitools config).
-# These need a second reviewer once the repo gains collaborators.
-/.github/                       @rashmieravichandran06121989
-/applitools.config.ts           @rashmieravichandran06121989
-/config/                        @rashmieravichandran06121989

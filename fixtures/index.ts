@@ -5,7 +5,7 @@ import {
   Target,
   type CheckSettings,
 } from '@applitools/eyes-playwright';
-import type { TestInfo } from '@playwright/test';
+import type { Page, TestInfo } from '@playwright/test';
 
 import { SauceLoginPage } from '../pages/saucedemo/login-page';
 import { SauceInventoryPage } from '../pages/saucedemo/inventory-page';
@@ -22,71 +22,22 @@ import { buildEyesConfig, visualEnabled } from '../applitools.config';
 
 // Applitools wrapper injected into every scenario. `.check()` is a no-op
 // when APPLITOOLS_API_KEY is missing so the suite still runs cleanly
-// without it.
+// without it. Per-test Eyes session with lazy open — a scenario that
+// never calls check() never opens a session, so the Applitools dashboard
+// doesn't fill with empty tests.
 export interface VisualEyes {
   check(name: string, target?: CheckSettings): Promise<void>;
 }
 
-// Per-scenario Eyes session, driven by a runner that lives at worker
-// scope (see `eyesRunner` below). Sharing the runner across scenarios
-// is what actually unlocks Ultrafast Grid's batched rendering — a fresh
-// runner per scenario loses the batching entirely.
-class EyesSession implements VisualEyes {
-  // Single nullable — null means "never opened." TypeScript narrows
-  // naturally through the null-check, so the old `opened` boolean and
-  // its unreachable-branch guard both drop out.
-  private eyes: Eyes | null = null;
-
-  constructor(
-    private readonly runner: VisualGridRunner,
-    private readonly page: import('@playwright/test').Page,
-    private readonly testTitle: string,
-  ) {}
-
-  async check(name: string, target?: CheckSettings): Promise<void> {
-    if (!visualEnabled) return;
-
-    if (!this.eyes) {
-      this.eyes = new Eyes(this.runner);
-      this.eyes.setConfiguration(buildEyesConfig());
-      await this.eyes.open(
-        this.page,
-        'qa-ai-automation-framework',
-        this.testTitle,
-      );
-    }
-
-    await this.eyes.check(name, target ?? Target.window().fully());
-  }
-
-  /**
-   * Close this scenario's Eyes session. Runs via the fixture boundary
-   * after `await use()`, so it fires whether the scenario passed or
-   * failed. `close(false)` returns results without throwing on diff —
-   * the CI-level Applitools gate is what fails the PR at batch scope.
-   */
-  async close(testInfo: TestInfo): Promise<void> {
-    if (!this.eyes) return;
-    try {
-      await this.eyes.close(false);
-    } catch (err) {
-      // Attach to testInfo so the error shows up in the HTML report
-      // without failing the scenario. Network blips here shouldn't
-      // turn an otherwise-green run red — the diff state lives in
-      // the Applitools dashboard regardless.
-      testInfo.annotations.push({
-        type: 'applitools-close-failed',
-        description: (err as Error).message ?? String(err),
-      });
-    }
-  }
+async function openEyes(page: Page, testTitle: string): Promise<Eyes> {
+  const runner = new VisualGridRunner({ testConcurrency: 5 });
+  const eyes = new Eyes(runner);
+  eyes.setConfiguration(buildEyesConfig());
+  await eyes.open(page, 'qa-ai-automation-framework', testTitle);
+  return eyes;
 }
 
-type WorkerFixtures = {
-  eyesRunner: VisualGridRunner;
-};
-
-type TestFixtures = {
+type PageObjects = {
   // SauceDemo
   sauceLoginPage: SauceLoginPage;
   sauceInventoryPage: SauceInventoryPage;
@@ -102,22 +53,7 @@ type TestFixtures = {
   eyes: VisualEyes;
 };
 
-export const test = base.extend<TestFixtures, WorkerFixtures>({
-  // Worker-scoped runner: one VisualGridRunner shared by every scenario
-  // this worker runs. Ultrafast Grid batches render jobs across scenarios
-  // for free once the runner is shared — the per-scenario construction
-  // we had before leaked N runners and lost all batching.
-  eyesRunner: [
-    async ({}, use) => {
-      const runner = new VisualGridRunner({ testConcurrency: 5 });
-      await use(runner);
-      // Flush any pending render jobs at worker teardown. `false` so we
-      // don't throw on unresolved diffs — those belong to the CI gate.
-      await runner.getAllTestResults(false).catch(() => undefined);
-    },
-    { scope: 'worker' },
-  ],
-
+export const test = base.extend<PageObjects>({
   sauceLoginPage: async ({ page }, use) => {
     await use(new SauceLoginPage(page));
   },
@@ -146,10 +82,27 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     await use(new OrangeLeavePage(page));
   },
 
-  eyes: async ({ page, eyesRunner }, use, testInfo: TestInfo) => {
-    const session = new EyesSession(eyesRunner, page, testInfo.title);
-    await use(session);
-    await session.close(testInfo);
+  eyes: async ({ page }, use, testInfo: TestInfo) => {
+    // Holder object so TS can narrow `state.eyes` across the closure.
+    // A plain `let eyes: Eyes | null` loses the type narrowing when
+    // mutated from inside `wrapper.check`.
+    const state: { eyes: Eyes | null } = { eyes: null };
+
+    const wrapper: VisualEyes = {
+      async check(name, target) {
+        if (!visualEnabled) return;
+        if (!state.eyes) state.eyes = await openEyes(page, testInfo.title);
+        await state.eyes.check(name, target ?? Target.window().fully());
+      },
+    };
+
+    await use(wrapper);
+
+    // close(false) returns results without throwing on diff — unresolved
+    // diffs land in the Applitools dashboard, not the scenario.
+    if (state.eyes) {
+      await state.eyes.close(false).catch(() => undefined);
+    }
   },
 });
 

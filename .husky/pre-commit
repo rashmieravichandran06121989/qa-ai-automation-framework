@@ -1,5 +1,0 @@
-#!/usr/bin/env sh
-
-# Runs lint-staged which ESLint-fixes + Prettier-formats only the staged
-# files. Full typecheck runs in CI — it's too slow for every commit.
-npx lint-staged

@@ -1,12 +1,19 @@
 import { defineConfig, devices } from '@playwright/test';
 import { defineBddProject } from 'playwright-bdd';
 import { resolve } from 'node:path';
-import { env } from './config/env';
+import * as dotenv from 'dotenv';
 
-// Env-overridable base URLs all go through the typed Config so a bad
-// value fails at boot instead of mid-test. See config/env.ts.
+dotenv.config();
 
-const isCI = env.CI;
+// Env-overridable base URLs so Docker / CI / local all read from the
+// same config. Defaults point at the public demo sites.
+const BASE_URL = process.env.BASE_URL ?? 'https://www.saucedemo.com';
+const ORANGEHRM_BASE_URL =
+  process.env.ORANGEHRM_BASE_URL ?? 'https://opensource-demo.orangehrmlive.com';
+const API_BASE_URL =
+  process.env.API_BASE_URL ?? 'https://jsonplaceholder.typicode.com';
+
+const isCI = !!process.env.CI;
 
 // Wired at project level so every BDD context boots pre-authenticated.
 // globalSetup writes this file (even an empty shell if login fails) so
@@ -29,7 +36,7 @@ export default defineConfig({
     ['allure-playwright', { outputFolder: 'allure-results' }],
   ],
   use: {
-    baseURL: env.BASE_URL,
+    baseURL: BASE_URL,
     headless: true,
     viewport: { width: 1280, height: 720 },
     screenshot: 'only-on-failure',
@@ -47,10 +54,6 @@ export default defineConfig({
       }),
       use: {
         ...devices['Desktop Chrome'],
-        // Seed every browser context with the cached OrangeHRM cookie
-        // jar. SauceDemo scenarios don't care (different domain).
-        // Login-feature scenarios call /auth/logout on open() so they
-        // still exercise the login form.
         storageState: ORANGE_STORAGE_STATE,
       },
     },
@@ -80,17 +83,11 @@ export default defineConfig({
       name: 'api',
       testDir: './tests/api',
       use: {
-        baseURL: env.API_BASE_URL,
-        // API tests don't need the browser storageState. Explicit
-        // `undefined` overrides the project defaults so the API
-        // context stays clean.
+        baseURL: API_BASE_URL,
         storageState: undefined,
       },
     },
   ],
 });
 
-// Re-exported so POMs that aren't bound to the project's baseURL
-// (OrangeHRM POMs — BDD project baseURL is SauceDemo) can still
-// reach the right host without another dotenv.config() pass.
-export const ORANGEHRM_BASE_URL = env.ORANGEHRM_BASE_URL;
+export { ORANGEHRM_BASE_URL };

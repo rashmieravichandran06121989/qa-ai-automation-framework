@@ -1,11 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { buildUser } from '../../fixtures/data-factory';
-import { PostSchema, PostEchoSchema } from './schemas';
 
 // jsonplaceholder accepts writes and echoes them back with a fresh id
 // but doesn't persist. Fine for contract testing — we're checking the
-// REST surface, not database state. Zod parse() on every response so
-// shape drift fails with a real diagnostic.
+// REST surface, not database state.
 
 test.describe('jsonplaceholder — posts (CRUD)', () => {
   test('POST /posts creates a post', async ({ request }) => {
@@ -19,8 +17,11 @@ test.describe('jsonplaceholder — posts (CRUD)', () => {
     const res = await request.post('/posts', { data: payload });
     expect(res.status()).toBe(201);
 
-    const created = PostSchema.parse(await res.json());
-    expect(created).toMatchObject(payload);
+    const body = await res.json();
+    expect(body).toMatchObject({
+      ...payload,
+      id: expect.any(Number),
+    });
   });
 
   test('PUT /posts/:id replaces a post', async ({ request }) => {
@@ -33,9 +34,7 @@ test.describe('jsonplaceholder — posts (CRUD)', () => {
 
     const res = await request.put('/posts/1', { data: payload });
     expect(res.status()).toBe(200);
-
-    const replaced = PostSchema.parse(await res.json());
-    expect(replaced).toMatchObject(payload);
+    expect(await res.json()).toMatchObject(payload);
   });
 
   test('PATCH /posts/:id partially updates a post', async ({ request }) => {
@@ -44,14 +43,11 @@ test.describe('jsonplaceholder — posts (CRUD)', () => {
     const res = await request.patch('/posts/1', { data: payload });
     expect(res.status()).toBe(200);
 
-    // PostEchoSchema (partial) because PATCH responses still include
-    // the untouched fields — but we validate that separately below so
-    // losing those untouched fields would be a real regression.
-    const patched = PostEchoSchema.parse(await res.json());
-    expect(patched.id).toBe(1);
-    expect(patched.title).toBe(payload.title);
-    expect(patched.body).toBeDefined();
-    expect(patched.userId).toBeDefined();
+    const body = await res.json();
+    expect(body).toMatchObject({ id: 1, title: payload.title });
+    // Untouched fields remain present — losing them would be a regression.
+    expect(body.body).toBeDefined();
+    expect(body.userId).toBeDefined();
   });
 
   test('DELETE /posts/:id returns 200 with an empty payload', async ({

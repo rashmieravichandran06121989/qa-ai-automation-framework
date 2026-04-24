@@ -1,9 +1,7 @@
 import { Page, Locator } from '@playwright/test';
 
-// Shared base for every POM. Pulls the three patterns every OrangeHRM
-// page was re-implementing (label-group input scoping, select-wrapper
-// scoping) up one level, and wraps actions in Allure-aware steps so
-// the HTML report reads as a narrative instead of a function-name dump.
+// Shared base for every POM. Pulls the label-group selector patterns
+// up one level so OrangeHRM POMs stop reinventing them.
 export class BasePage {
   protected readonly page: Page;
 
@@ -44,8 +42,7 @@ export class BasePage {
   /**
    * OrangeHRM's Vue select bound its click handler to `.oxd-select-wrapper`
    * rather than the inner `.oxd-select-text` div. Clicking the text div
-   * lands outside the handler's hit area under load — spent real time
-   * on that one. Always click the wrapper.
+   * lands outside the handler's hit area under load.
    */
   protected selectWrapperInGroup(labelText: string): Locator {
     return this.page
@@ -53,34 +50,5 @@ export class BasePage {
       .filter({ hasText: labelText })
       .locator('.oxd-select-wrapper')
       .first();
-  }
-
-  /**
-   * Wrap an action so it shows up in the Allure report as a named step.
-   * Kept dynamic-import so POMs remain usable in tests that don't load
-   * Allure (unit tests, standalone smoke runs).
-   *
-   * Important: the try/catch guards ONLY the import. If body() throws,
-   * we let it bubble — an earlier version of this wrapper caught body
-   * errors and re-ran the body, which caused a real double-execution
-   * flake when a scenario half-completed (creating two employees on
-   * the add-employee flow, for instance).
-   */
-  protected async step<T>(name: string, body: () => Promise<T>): Promise<T> {
-    let allureStep:
-      | ((n: string, b: () => Promise<T>) => Promise<T>)
-      | undefined;
-    try {
-      const mod = await import('allure-playwright');
-      // `allure.step` is typed as generic; cast to the narrowed form.
-      allureStep = (mod as { allure: { step: typeof allureStep } }).allure
-        .step as typeof allureStep;
-    } catch {
-      // Allure not available — run body unwrapped.
-    }
-    if (allureStep) {
-      return allureStep(name, body);
-    }
-    return body();
   }
 }

@@ -1,7 +1,6 @@
 # QA AI Automation Framework
 
 ![CI](https://github.com/rashmieravichandran06121989/qa-ai-automation-framework/actions/workflows/playwright.yml/badge.svg)
-![Nightly](https://github.com/rashmieravichandran06121989/qa-ai-automation-framework/actions/workflows/nightly.yml/badge.svg)
 ![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)
 ![Playwright](https://img.shields.io/badge/playwright-1.44-blue)
 ![Applitools](https://img.shields.io/badge/applitools-eyes--playwright-orange)
@@ -34,9 +33,8 @@ flowchart TD
     Dev -->|npm run test:bdd| Local[Local Playwright Runner]
     Dev -->|docker compose run tests| Docker[Docker]
 
-    GH --> Security[Security Gate<br/>npm audit · gitleaks · CodeQL]
-    Security --> Quality[Quality Gate<br/>lint · typecheck · format]
-    Quality --> Matrix[Browser × Shard Matrix<br/>chromium · firefox · webkit<br/>× 4 shards]
+    GH --> Quality[Quality Gate<br/>lint · typecheck · format]
+    Quality --> Matrix[Browser Matrix<br/>chromium · firefox · webkit]
 
     Matrix --> Sauce[SauceDemo Suite]
     Matrix --> Orange[OrangeHRM Suite]
@@ -47,18 +45,11 @@ flowchart TD
     Eyes -->|yes| Grid[Applitools Ultrafast Grid<br/>Chrome · Firefox · Safari Mobile]
     Eyes -->|no| Skip[Visual checks skipped<br/>functional assertions still run]
 
-    Sauce --> Allure[Allure Report]
-    Orange --> Allure
-    API --> Allure
-    Allure --> Pages[GitHub Pages]
+    Sauce --> Report[Playwright HTML + Allure artifacts]
+    Orange --> Report
+    API --> Report
 
     Grid --> Dashboard[Applitools Dashboard]
-    Grid --> Gate{Unresolved diffs?}
-    Gate -->|yes| Fail[PR check fails]
-    Gate -->|no| Pass[PR check passes]
-
-    Fail --> Notify{main?}
-    Notify -->|yes| Slack[Slack ping]
 ```
 
 ## How a visual regression actually gets caught
@@ -83,18 +74,14 @@ sequenceDiagram
 
 ## Stack
 
-TypeScript 5.4 on Node 20 LTS. Playwright 1.44 as the runner. playwright-bdd 8.5 compiles `.feature` files into Playwright tests so I keep native parallelism, traces, and the UI mode debugger. Applitools Eyes Ultrafast Grid for visual. `@faker-js/faker` for test data through builders in `fixtures/data-factory.ts`. Allure for reporting with Playwright's HTML report as the fallback. ESLint, Prettier, Husky, lint-staged on the quality side. Docker image pinned to `mcr.microsoft.com/playwright:v1.44.0-jammy`. GitHub Actions for CI with a security pre-gate, a PR matrix sharded 4-ways per browser, a nightly cron, an Applitools gate, and Slack notification on red main.
+TypeScript 5.4 on Node 20 LTS. Playwright 1.44 as the runner. playwright-bdd 8.5 compiles `.feature` files into Playwright tests so I keep native parallelism, traces, and the UI mode debugger. Applitools Eyes Ultrafast Grid for visual. `@faker-js/faker` for test data through builders in `fixtures/data-factory.ts`. Allure for reporting with Playwright's HTML report as the fallback. ESLint + Prettier on the quality side. Docker image pinned to `mcr.microsoft.com/playwright:v1.44.0-jammy`. GitHub Actions for CI running one job per browser on push to main.
 
 GitHub Copilot earns its line in the stack because of `.github/copilot-instructions.md` — a conventions file Copilot reads automatically, so every completion lands in project style instead of the generic default. The prompts I actually used are committed under `docs/copilot-prompts/` as the receipt.
 
-### Stack highlights — the decisions worth calling out
+### Two things worth calling out
 
-- **Typed config via Zod.** `config/env.ts` validates every env var at boot and exits non-zero on malformed input. No `process.env.*` reads scattered through the code — one schema, one source of truth, one failure mode.
-- **Worker-scoped Applitools runner.** `fixtures/index.ts` declares the `VisualGridRunner` at `{ scope: 'worker' }`. One runner shared across every scenario that worker executes, so Ultrafast Grid batches renders for free. Per-scenario runners would leak N contexts and lose the batching.
-- **storageState fast-path for OrangeHRM.** `globalSetup` caches an Admin cookie jar at `.auth/orangehrm.json` (gitignored). Every BDD project wires it via `test.use({ storageState })`. The shared login step short-circuits when the dashboard loads within 8s; full UI login is the fallback.
-- **Zod contract schemas on the API layer.** `tests/api/schemas.ts` holds `UserSchema`, `PostSchema`, `PostEchoSchema`. Each test parses the response body — shape drift fails with a path (`$.address.city`), not a vague `toMatchObject` miss.
-- **Centralized credentials.** `config/credentials.ts` is the single place that references `admin123` / `secret_sauce`. Every consumer imports from there; env vars override the demo defaults.
-- **Supply-chain hygiene committed.** `.github/dependabot.yml` (weekly grouped npm + Actions updates), `.github/CODEOWNERS`, `SECURITY.md` — the org-level signals you'd expect from a framework you plan to hand to a team.
+- **storageState fast-path for OrangeHRM.** `globalSetup` logs in as Admin once and caches the cookie jar at `.auth/orangehrm.json` (git-ignored). Every BDD project wires it via `test.use({ storageState })`. The shared login step short-circuits when the dashboard loads within 8s; full UI login is the fallback. Drops per-scenario login from ~20s to ~4s.
+- **Centralized credentials.** `config/credentials.ts` is the single place that references `admin123` / `secret_sauce`. Every consumer imports from there; env vars override the demo defaults. Models the real-auth pattern without adding a vault dependency.
 
 ## Verification
 
@@ -222,16 +209,11 @@ The second piece is `docs/copilot-prompts/` — the actual prompts I sent, what 
 ```
 qa-ai-automation-framework/
 ├── .github/
-│   ├── CODEOWNERS                    # review routing
 │   ├── copilot-instructions.md       # Copilot reads this on open
-│   ├── dependabot.yml                # weekly grouped npm + Actions bumps
 │   └── workflows/
-│       ├── playwright.yml            # Security → Quality → Matrix × 4 shards → Allure → Notify
-│       └── nightly.yml               # Cron 02:00 UTC full regression
-├── .husky/pre-commit                 # lint-staged on commit
+│       └── playwright.yml            # Quality gate → 3-browser matrix → artifacts
 ├── .vscode/                          # recommended extensions + workspace settings
 ├── config/
-│   ├── env.ts                        # Zod-validated env schema
 │   └── credentials.ts                # central creds, env-overridable
 ├── docs/
 │   ├── copilot-prompts/              # committed prompts (Day 5–6 evidence)
@@ -239,23 +221,19 @@ qa-ai-automation-framework/
 ├── features/saucedemo/               # 4 .feature files
 ├── features/orangehrm/               # 4 .feature files
 ├── fixtures/
-│   ├── index.ts                      # POM + worker-scoped eyes fixture
+│   ├── index.ts                      # POM + per-test Applitools fixture
 │   ├── data-factory.ts               # Faker builders
 │   └── orange-storage-state.ts       # globalSetup — caches Admin cookies
 ├── pages/
-│   ├── base-page.ts                  # inputInGroup / selectWrapperInGroup / step
+│   ├── base-page.ts
 │   ├── saucedemo/                    # LoginPage, InventoryPage, CartPage, CheckoutPage
 │   └── orangehrm/                    # Login, Dashboard, PIM, AdminUsers, Leave
 ├── scripts/allure-env.ts             # git SHA + branch → Allure env
-├── server/                           # Phase 2 QA Agent (demo-site-agnostic, preserved)
 ├── steps/
 │   ├── saucedemo/
 │   ├── orangehrm/
 │   └── shared.steps.ts
-├── tests/api/
-│   ├── schemas.ts                    # Zod contract schemas
-│   └── *.api.test.ts                 # jsonplaceholder REST tests
-├── SECURITY.md                       # disclosure policy
+├── tests/api/                        # jsonplaceholder REST tests
 ├── applitools.config.ts
 ├── Dockerfile
 ├── docker-compose.yml
@@ -265,13 +243,11 @@ qa-ai-automation-framework/
 
 ## CI
 
-Two workflows under `.github/workflows/`.
+One workflow under `.github/workflows/playwright.yml`. Runs only on push to main — no scheduled cron, no PR triggers — plus `workflow_dispatch` for manual runs from the Actions tab.
 
-`playwright.yml` runs on push and PR with five stages. **Security** first — `npm audit --audit-level=high`, gitleaks for leaked secrets, CodeQL for static analysis — fail fast on supply-chain issues before burning a browser runner. **Quality** next — Prettier, ESLint, `tsc --noEmit` — blocks the matrix on style or type errors. **Test matrix** is 3 browsers × 4 shards = 12 parallel runners, each executing `--shard=<n>/4` of the BDD suite on its assigned browser with Playwright binaries cached by version. **Allure publish** merges every shard's results, generates one report, pushes to `gh-pages`. **Notify** fires Slack only when main goes red.
+Two jobs. **Quality gate** first — Prettier, ESLint, `tsc --noEmit` — blocks the matrix on style or type errors. **Test matrix** runs the BDD suite on chromium, firefox, and webkit in parallel, with Playwright binaries cached by version. API tests run once on the chromium leg. The Playwright HTML report and Allure results upload as artifacts on every run, successful or not.
 
-`nightly.yml` runs at 02:00 UTC — full regression, Allure artifacts kept for 30 days, Applitools batch tagged `nightly`.
-
-Repo secrets: `APPLITOOLS_API_KEY` enables visual checks and the PR gate. Without it, CI stays green and the visual steps self-skip. `SLACK_WEBHOOK_URL` is optional; the notify job self-skips when absent. `GITHUB_TOKEN` is auto-provided and handles the `gh-pages` push.
+Repo secrets: `APPLITOOLS_API_KEY` enables visual checks. Without it, CI stays green and the visual steps self-skip.
 
 ## Env vars
 
@@ -287,15 +263,9 @@ All optional for local runs. The suite degrades gracefully when they're missing.
 
 ## Troubleshooting
 
-**Applitools returns 401 on first run.** The key is alphanumeric only. Common cause: leftover quotes or the `.env.example` placeholder (`your-applitools-api-key-here`). `config/env.ts` rejects the placeholder by design; replace it with the real key from `eyes.applitools.com → API Key`.
+**Applitools visual checks don't fire.** The key must be alphanumeric. Common cause: leftover quotes or the `.env.example` placeholder (`your-applitools-api-key-here`). `applitools.config.ts` rejects the placeholder by design; replace it with the real key from `eyes.applitools.com → API Key`.
 
 **OrangeHRM scenarios fall through to UI login every time.** `.auth/orangehrm.json` is stale or the demo rotated sessions. Delete it and re-run — `globalSetup` rebuilds it. If the demo is unreachable, globalSetup writes an empty state so tests still construct; scenarios fall back to UI login via the guard in `shared.steps.ts`.
-
-**`npm audit` fails the CI security job.** Run `npm audit --audit-level=high --omit=dev` locally and triage. Production-dep high-severity issues block the build by design.
-
-**CodeQL step errors on first run.** Code scanning has to be enabled in repo Settings → Code security → Code scanning → Set up CodeQL. One-time click.
-
-**Allure publish job skipped.** Publish only fires on `github.ref == 'refs/heads/main'` — PR runs upload artifacts but don't push to `gh-pages`. Merge to main to see the published report.
 
 **OrangeHRM Leave scenarios time out.** They're `@flaky`-tagged and excluded from default runs. The Vue click-outside handler races Playwright's actionability under shared-demo load. Run explicitly via `npm run test:bdd:flaky` on a warm context, or pin `--workers=1`.
 
@@ -312,10 +282,9 @@ All optional for local runs. The suite degrades gracefully when they're missing.
 
 ## What's next
 
-Phase 2 is already scoped in `PHASE2.md` — a local QA Agent server under `server/` that wraps this framework with JIRA integration, AI step generation, and screenshot capture. Beyond that, the refactors I'd push in a follow-up sprint:
+Things I'd add in a follow-up sprint:
 
+- **axe-core accessibility checks** on the visual-regression scenarios. Ten lines to wire in, meaningful signal for a quality role.
 - **Plugin boundary for targets.** Adding a third target today still requires editing `fixtures/index.ts`. A `Target` interface each POM set implements would let new targets plug in without touching the core.
-- **Consumer contracts for the API layer.** Upgrade from Zod shape-validation to Pact or openapi-typescript when pointing at a real internal API.
 - **Flake telemetry.** Emit per-scenario flake rates to a committed JSON snapshot a dashboard can read, so `@flaky` stops being a tag and starts being data.
-- **axe-core accessibility checks** on the visual-regression scenarios. Ten lines to wire in, meaningful signal for a quality-architect role.
-- **Session health-check fixture.** Beat-cop ping against `/api/v2/dashboard/employees` in a worker `beforeEach` to catch stale storageState before the scenario spends a second on it.
+- **Session health-check fixture.** Ping `/api/v2/dashboard/employees` in a worker `beforeEach` to catch stale storageState before the scenario spends a second on it.

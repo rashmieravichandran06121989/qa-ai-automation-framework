@@ -6,7 +6,6 @@
 import { execSync } from 'node:child_process';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { env, visualEnabled } from '../config/env';
 
 function safeExec(cmd: string): string {
   try {
@@ -14,8 +13,6 @@ function safeExec(cmd: string): string {
       .toString()
       .trim();
   } catch {
-    // Tag the report with a marker so readers see metadata was degraded
-    // instead of quietly assuming `unknown` means "not on a branch."
     return 'unknown (degraded-metadata)';
   }
 }
@@ -26,11 +23,11 @@ const lines = [
   `GitBranch=${safeExec('git rev-parse --abbrev-ref HEAD')}`,
   `GitCommit=${safeExec('git rev-parse --short HEAD')}`,
   `GitAuthor=${safeExec('git log -1 --pretty=format:%an')}`,
-  `BaseURL=${env.BASE_URL}`,
-  `OrangeHRMBaseURL=${env.ORANGEHRM_BASE_URL}`,
-  `ApiBaseURL=${env.API_BASE_URL}`,
-  `VisualAI=${visualEnabled ? 'enabled' : 'disabled'}`,
-  `CI=${env.CI ? 'true' : 'false'}`,
+  `BaseURL=${process.env.BASE_URL ?? 'https://www.saucedemo.com'}`,
+  `OrangeHRMBaseURL=${process.env.ORANGEHRM_BASE_URL ?? 'https://opensource-demo.orangehrmlive.com'}`,
+  `ApiBaseURL=${process.env.API_BASE_URL ?? 'https://jsonplaceholder.typicode.com'}`,
+  `VisualAI=${process.env.APPLITOOLS_API_KEY ? 'enabled' : 'disabled'}`,
+  `CI=${process.env.CI ? 'true' : 'false'}`,
 ];
 
 const outDir = join(process.cwd(), 'allure-results');

@@ -4,25 +4,31 @@ import {
   BrowserType,
   ScreenOrientation,
 } from '@applitools/eyes-playwright';
-import { env, visualEnabled } from './config/env';
 
-// Shared Applitools config. One batch per suite run so SauceDemo and
-// OrangeHRM checkpoints group under a single review in the dashboard.
-// When APPLITOOLS_API_KEY is missing we skip visual checks cleanly — the
-// functional assertions still run, so local dev and forked PRs aren't
-// blocked on not having a key. Ultrafast Grid fans one DOM snapshot out
-// to three browsers server-side, so we pay the cost of one local run for
-// three browser results.
+// One batch per suite run groups SauceDemo + OrangeHRM checkpoints under
+// a single review in the dashboard. When APPLITOOLS_API_KEY is missing
+// visual checks skip cleanly — functional assertions still run, so local
+// dev and forked PRs aren't blocked on not having a key. Ultrafast Grid
+// fans one DOM snapshot out to three browsers server-side.
 
 export const applitoolsBatch = new BatchInfo({
   name: 'SauceDemo + OrangeHRM AI-Augmented Suite',
 });
 
+// True only when we have a real key. The placeholder in .env.example has
+// hyphens; real Applitools keys are alphanumeric, so a cheap regex
+// catches the "fresh clone, forgot to update .env" case.
+const apiKey = process.env.APPLITOOLS_API_KEY;
+export const visualEnabled =
+  !!apiKey &&
+  apiKey !== 'your-applitools-api-key-here' &&
+  /^[A-Za-z0-9]+$/.test(apiKey);
+
 export function buildEyesConfig(): Configuration {
   const config = new Configuration();
 
-  if (visualEnabled && env.APPLITOOLS_API_KEY) {
-    config.setApiKey(env.APPLITOOLS_API_KEY);
+  if (visualEnabled && apiKey) {
+    config.setApiKey(apiKey);
   }
 
   config.setBatch(applitoolsBatch);
@@ -40,7 +46,3 @@ export function buildEyesConfig(): Configuration {
 
   return config;
 }
-
-// Re-export so existing callers (fixtures/index.ts) don't have to change
-// their import path.
-export { visualEnabled };
