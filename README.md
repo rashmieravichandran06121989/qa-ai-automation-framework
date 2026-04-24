@@ -5,6 +5,7 @@
 ![Playwright](https://img.shields.io/badge/playwright-1.44-blue)
 ![Applitools](https://img.shields.io/badge/applitools-eyes--playwright-orange)
 ![Copilot](https://img.shields.io/badge/github-copilot-6e40c9)
+![Allure](https://img.shields.io/badge/allure-report-ff6f00)
 
 Playwright + playwright-bdd with Applitools Eyes and GitHub Copilot wired in. Built over a 10-day sprint as the Phase 1 output of my AI-assisted testing upskill plan. Runs locally, in VSCode, or in GitHub Actions with the same commands.
 
@@ -20,7 +21,7 @@ Eight Gherkin features — four for SauceDemo, four for OrangeHRM — driving ni
 | UI + BDD | OrangeHRM                    | 4 features, 8 default + 2 `@flaky` | 4      | ~35s (warm cache)      |
 | API      | jsonplaceholder.typicode.com | 3 files, 10 cases, full CRUD       | —      | ~5s                    |
 
-The two `@flaky` scenarios are OrangeHRM's Apply Leave flow. The public demo rate-limits the Vue click-outside handler at roughly 2 req/s under concurrent sessions; the POM wiring is verified against a warm context via `npm run test:bdd:flaky`. Gated behind the `@flaky` tag so default CI stays deterministic.
+The two `@flaky` scenarios are OrangeHRM's Apply Leave flow. The POM matches the pattern proven working on the Admin filter dropdowns, but the Leave form's Leave Type select renders via an XHR whose timing I haven't pinned against the shared demo. Gated behind `@flaky` so default CI stays deterministic; run explicitly with `--grep @flaky --workers=1 --headed` when debugging against a warm demo.
 
 Gherkin sits on top of the same Page Objects a native Playwright test would use. Product folks read the `.feature` files; engineers read the TypeScript. One suite, two readers.
 
@@ -71,7 +72,7 @@ sequenceDiagram
 
 ## Stack
 
-TypeScript 5.4 on Node 20 LTS. Playwright 1.44 as the runner. playwright-bdd 8.5 compiles `.feature` files into Playwright tests so I keep native parallelism, traces, and the UI mode debugger. Applitools Eyes Ultrafast Grid for visual. `@faker-js/faker` for test data through builders in `fixtures/data-factory.ts`. Playwright's built-in HTML reporter for test results. ESLint + Prettier on the quality side. GitHub Actions for CI running one job per browser on push to main.
+TypeScript 5.4 on Node 20 LTS. Playwright 1.44 as the runner. playwright-bdd 8.5 compiles `.feature` files into Playwright tests so I keep native parallelism, traces, and the UI mode debugger. Applitools Eyes Ultrafast Grid for visual. `@faker-js/faker` for test data through builders in `fixtures/data-factory.ts`. Playwright's built-in HTML reporter plus Allure for richer dashboards. ESLint + Prettier on the quality side. GitHub Actions for CI running one job per browser on push to main.
 
 GitHub Copilot earns its line in the stack because of `.github/copilot-instructions.md` — a conventions file Copilot reads automatically, so every completion lands in project style instead of the generic default. The prompts I actually used are committed under `docs/copilot-prompts/` as the receipt.
 
@@ -89,7 +90,7 @@ npm run typecheck       # 0 errors
 npm run lint            # 0 errors, 3 warnings on intentional { force: true } clicks
 npm run format:check    # all files match
 npm run test:api        # 10/10 green in ~5s
-npm run test:bdd        # 25 BDD scenarios green (@flaky excluded), ~45s
+npm run test:bdd        # 23 BDD scenarios green (@flaky excluded), ~55s
 ```
 
 ## Running it locally from VSCode
@@ -264,7 +265,7 @@ All optional for local runs. The suite degrades gracefully when they're missing.
 
 **OrangeHRM scenarios fall through to UI login every time.** `.auth/orangehrm.json` is stale or the demo rotated sessions. Delete it and re-run — `globalSetup` rebuilds it. If the demo is unreachable, globalSetup writes an empty state so tests still construct; scenarios fall back to UI login via the guard in `shared.steps.ts`.
 
-**OrangeHRM Leave scenarios time out.** They're `@flaky`-tagged and excluded from default runs. The Vue click-outside handler races Playwright's actionability under shared-demo load. Run explicitly via `npm run test:bdd:flaky` on a warm context, or pin `--workers=1`.
+**OrangeHRM scenarios time out under parallel load.** The public demo throttles concurrent sessions. Local default is `workers=5`; `test:orangehrm` pins `--workers=1` to sidestep it. CI already runs serial.
 
 ## Phase 1 plan → repo mapping
 

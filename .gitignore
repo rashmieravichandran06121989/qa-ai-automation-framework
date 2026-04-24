@@ -6,6 +6,10 @@ playwright-report/
 test-results/
 .features-gen/
 
+# Allure
+allure-results/
+allure-report/
+
 # Env / secrets
 .env
 .env.*.local

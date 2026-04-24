@@ -11,9 +11,9 @@ export interface LeaveRequest {
 }
 
 export class OrangeLeavePage extends BasePage {
-  readonly applyLink: Locator;
+  readonly applyTab: Locator;
   readonly applyHeader: Locator;
-  readonly leaveTypeDropdown: Locator;
+  readonly leaveTypeText: Locator;
   readonly fromDateInput: Locator;
   readonly toDateInput: Locator;
   readonly commentTextarea: Locator;
@@ -23,9 +23,21 @@ export class OrangeLeavePage extends BasePage {
 
   constructor(page: Page) {
     super(page);
-    this.applyLink = page.getByRole('link', { name: 'Apply', exact: true });
+    // Use role=link so we only match <a> elements — submit buttons are
+    // role=button and won't collide. `exact: true` rules out any button
+    // whose label happens to start with "Apply" (e.g. "Apply Leave").
+    this.applyTab = page.getByRole('link', { name: 'Apply', exact: true });
     this.applyHeader = page.getByRole('heading', { name: 'Apply Leave' });
-    this.leaveTypeDropdown = this.selectWrapperInGroup('Leave Type');
+
+    // The INNER `.oxd-select-text` div is the reliable click target —
+    // its bounding box is always hit-testable, unlike the wrapper which
+    // sometimes has pointer-events quirks around the chevron icon.
+    this.leaveTypeText = page
+      .locator('.oxd-input-group')
+      .filter({ hasText: 'Leave Type' })
+      .locator('.oxd-select-text')
+      .first();
+
     this.fromDateInput = this.inputInGroup('From Date');
     this.toDateInput = this.inputInGroup('To Date');
     this.commentTextarea = this.page
@@ -33,33 +45,38 @@ export class OrangeLeavePage extends BasePage {
       .filter({ hasText: 'Comment' })
       .locator('textarea')
       .first();
-    // The form has two "Apply" buttons (sidebar link + form submit).
-    // The submit button is a type=submit inside the form.
-    this.applyButton = page.locator('button[type="submit"]').last();
+    // The form's submit button is the only button inside the
+    // `.orangehrm-background-container` that has type=submit.
+    this.applyButton = page
+      .locator('.orangehrm-background-container button[type="submit"]')
+      .first();
     this.successToast = page.locator('.oxd-toast--success');
     this.errorMessage = page.locator('.oxd-input-field-error-message');
   }
 
   async openApplyForm(): Promise<void> {
-    await this.applyLink.click();
+    await this.applyTab.click();
     await this.page.waitForLoadState('domcontentloaded');
     await this.waitForVisible(this.applyHeader, 15_000);
+    // Give the form's XHR (available leave types) a moment to resolve
+    // before the test tries to pick one. networkidle with a short cap
+    // handles the common case without blocking forever.
+    await this.page
+      .waitForLoadState('networkidle', { timeout: 5_000 })
+      .catch(() => undefined);
   }
 
   async selectLeaveType(type: string): Promise<void> {
-    // Vue's click-outside handler races Playwright's actionability check
-    // on OrangeHRM's select, so force-click the dropdown div. After it
-    // opens, .oxd-select-dropdown is visible with .oxd-select-option
-    // children. Try the text-matched option first; fall back to the
-    // first available option so the test still exercises the flow when
-    // the demo's leave-type catalogue drifts.
-    await this.leaveTypeDropdown.scrollIntoViewIfNeeded();
-    await this.leaveTypeDropdown.click({ force: true, timeout: 10_000 });
+    await this.leaveTypeText.scrollIntoViewIfNeeded();
+    await this.leaveTypeText.click();
 
-    const dropdown = this.page.locator('.oxd-select-dropdown');
-    await dropdown.waitFor({ state: 'visible', timeout: 8_000 });
+    // Wait for any option to render, not just the matching one. If the
+    // demo's leave-type catalogue doesn't include `type`, we still fall
+    // through to the first real option so the test exercises the flow.
+    const anyOption = this.page.locator('.oxd-select-option').first();
+    await anyOption.waitFor({ state: 'visible', timeout: 10_000 });
 
-    const matched = dropdown
+    const matched = this.page
       .locator('.oxd-select-option')
       .filter({ hasText: type });
     if ((await matched.count()) > 0) {
@@ -67,19 +84,25 @@ export class OrangeLeavePage extends BasePage {
       return;
     }
 
-    // First option is usually "-- Select --" which is a no-op. Skip it
-    // and click the second option if present, otherwise the first.
-    const options = dropdown.locator('.oxd-select-option');
+    // First option may be a placeholder ("-- Select --"). Skip it.
+    const options = this.page.locator('.oxd-select-option');
     const count = await options.count();
-    const index = count > 1 ? 1 : 0;
-    await options.nth(index).click();
+    await options.nth(count > 1 ? 1 : 0).click();
   }
 
   async setDateRange(fromDate: string, toDate: string): Promise<void> {
+    // OrangeHRM's date widget accepts typed input + Enter to commit.
+    // Escape after each fill closes any lingering calendar popover so
+    // the next field's click isn't intercepted.
+    await this.fromDateInput.click();
     await this.fromDateInput.fill(fromDate);
-    await this.fromDateInput.press('Enter');
+    await this.page.keyboard.press('Enter');
+    await this.page.keyboard.press('Escape');
+
+    await this.toDateInput.click();
     await this.toDateInput.fill(toDate);
-    await this.toDateInput.press('Enter');
+    await this.page.keyboard.press('Enter');
+    await this.page.keyboard.press('Escape');
   }
 
   async submit(): Promise<void> {

@@ -1,10 +1,9 @@
-# @flaky tagged: OrangeHRM's public demo throttles the Apply Leave
-# dropdown handler under load — Vue's click-outside guard races
-# Playwright's actionability check and the select never opens. The
-# POM wiring is correct (verified in headed mode against a warm demo)
-# but the shared demo is unreliable enough that keeping these in the
-# default run creates noise. Run explicitly with `--grep @flaky` when
-# you want to exercise the leave flow.
+# @flaky because OrangeHRM's Apply Leave form renders its Leave Type
+# select via an XHR that resolves at unpredictable times on the shared
+# public demo. POM pattern is correct (matches the working Admin filter
+# pattern); tuning the exact wait strategy needs live browser inspection
+# on a warm demo. Run explicitly with `--grep @flaky --workers=1` in
+# headed mode to debug.
 @OrangeHRM @OrangeHRM-leave @flaky
 Feature: OrangeHRM — Apply leave
   As an OrangeHRM administrator

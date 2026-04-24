@@ -33,6 +33,7 @@ export default defineConfig({
   reporter: [
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
     ['list'],
+    ['allure-playwright', { outputFolder: 'allure-results' }],
   ],
   use: {
     baseURL: BASE_URL,
