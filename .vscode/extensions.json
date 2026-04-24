@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "ms-playwright.playwright",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "cucumberopen.cucumber-official",
+    "github.copilot",
+    "github.copilot-chat"
+  ]
+}

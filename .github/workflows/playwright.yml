@@ -1,4 +1,4 @@
-name: Playwright BDD Tests
+name: CI
 
 on:
   push:
@@ -7,130 +7,230 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
 jobs:
-  test:
+  # ── Security gate ─────────────────────────────────────────────────────────
+  # Fail fast on supply-chain or leaked-secret issues before burning a single
+  # browser runner. npm audit + gitleaks + CodeQL, in that order of cost.
+  security:
+    name: Supply chain + secret scan
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-
+    timeout-minutes: 10
     steps:
-      - name: Checkout tests
-        uses: actions/checkout@v4
-
-      # The public demo site (practicesoftwaretesting.com) sits behind
-      # Cloudflare, which shows a bot-challenge interstitial to requests
-      # from GitHub Actions runner IPs. That challenge page replaces the
-      # real Angular SPA, so UI selectors never resolve and tests fail
-      # with "Cart contained 0 items" (or similar). To avoid this, we
-      # run the application locally in CI via its official docker-compose
-      # stack and point the tests at http://localhost:4200.
-      - name: Checkout demo app
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          repository: testsmith-io/practice-software-testing
-          path: demo-app
-          ref: main
+          fetch-depth: 0
 
-      - name: Start demo app via docker compose
-        working-directory: demo-app
-        run: |
-          # The repo's own .env sets SPRINT=sprint5 which the compose file
-          # interpolates into volume paths. Nothing extra needed.
-          docker compose up -d
-          docker compose ps
-
-      # The laravel-api image shares /var/www with a one-shot `composer`
-      # service that installs PHP dependencies. `php artisan` will fail
-      # until composer finishes, and the DB container also needs time to
-      # initialise. Retry the seed until both prerequisites are ready.
-      - name: Run database migrations and seed
-        working-directory: demo-app
-        timeout-minutes: 10
-        run: |
-          echo "Seeding database (this also proves composer install + MariaDB are ready)..."
-          for i in $(seq 1 40); do
-            echo "--- Attempt ${i} ---"
-            if docker compose exec -T laravel-api php artisan migrate:fresh --seed --force; then
-              echo "Seed completed on attempt ${i}"
-              exit 0
-            fi
-            sleep 15
-          done
-          echo "Seed never succeeded"
-          docker compose logs --tail=200 composer laravel-api mariadb
-          exit 1
-
-      # The angular-ui container runs `npm install --force && ng serve`
-      # from scratch, which takes 3-5 minutes on first boot. Be patient.
-      - name: Wait for frontend to serve
-        timeout-minutes: 8
-        run: |
-          echo "Waiting for http://localhost:4200 to respond..."
-          for i in $(seq 1 90); do
-            if curl -fsS http://localhost:4200 >/dev/null 2>&1; then
-              echo "Frontend responded after ${i} attempts"
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "Frontend never came up"
-          exit 1
-
-      - name: Verify backend has seeded data
-        run: |
-          echo "Fetching /products from http://localhost:8091 ..."
-          RESP=$(curl -fsS "http://localhost:8091/products?page=1" || echo "")
-          echo "Response preview (first 500 chars): ${RESP:0:500}"
-          if ! echo "$RESP" | grep -q '"id"'; then
-            echo "ERROR: /products returned no items — seed did not populate products"
-            exit 1
-          fi
-          echo "Seeded products confirmed"
-
-      - name: Setup Node 20
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install dependencies
-        run: npm ci
+      # --ignore-scripts so we don't run a malicious postinstall while
+      # we're still auditing the lockfile.
+      - name: Install (no scripts)
+        run: npm ci --ignore-scripts
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+      - name: npm audit (production deps, high+)
+        run: npm audit --audit-level=high --omit=dev
 
-      - name: Run BDD tests
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
         env:
-          BASE_URL: http://localhost:4200
-          API_BASE_URL: http://localhost:8091
-        run: npm run test:bdd
-        timeout-minutes: 20
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Dump demo app logs on failure
-        if: failure()
-        working-directory: demo-app
-        run: docker compose logs --tail=400
+      - name: CodeQL init
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
 
-      - name: Teardown demo app
+      - name: CodeQL analyze
+        uses: github/codeql-action/analyze@v3
+
+  # ── Quality gate ──────────────────────────────────────────────────────────
+  # Blocks the matrix if lint/typecheck/format fails. Cheap, fast, deterministic.
+  quality:
+    name: Lint + Typecheck + Format
+    needs: security
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+
+  # ── Test matrix ───────────────────────────────────────────────────────────
+  # 3 browsers x 4 shards = 12 parallel runners. Each runner executes 1/4 of
+  # the BDD suite on its assigned browser. Cuts wall-clock time roughly 4x
+  # versus the single-runner-per-browser layout.
+  test:
+    name: Test ${{ matrix.browser }} · shard ${{ matrix.shard }}/4
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+        shard: [1, 2, 3, 4]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      # Cache Playwright browser binaries by Playwright version. Without
+      # this, every runner re-downloads ~300MB per job. Key on the resolved
+      # Playwright version so a library bump invalidates automatically.
+      - name: Resolve Playwright version
+        id: pw
+        run: |
+          v=$(node -p "require('@playwright/test/package.json').version")
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ steps.pw.outputs.version }}-${{ matrix.browser }}
+
+      - name: Install Playwright browser (${{ matrix.browser }})
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Run BDD shard
+        env:
+          APPLITOOLS_API_KEY: ${{ secrets.APPLITOOLS_API_KEY }}
+          APPLITOOLS_BATCH_ID: ${{ github.run_id }}
+        run: |
+          npx bddgen
+          npx playwright test \
+            --project=bdd:${{ matrix.browser }} \
+            --grep-invert @flaky \
+            --shard=${{ matrix.shard }}/4
+
+      - name: API suite (chromium shard 1 only)
+        if: matrix.browser == 'chromium' && matrix.shard == 1
+        run: npm run test:api
+
+      - name: Write Allure env metadata
         if: always()
-        working-directory: demo-app
-        run: docker compose down -v
+        run: npx tsx scripts/allure-env.ts
+
+      - name: Upload Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-${{ matrix.browser }}-${{ matrix.shard }}
+          path: allure-results/
+          retention-days: 14
+
+      # Traces, screenshots, videos on failure only. Keeps the green-run
+      # artifact footprint small while preserving enough context to
+      # debug a red run.
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-trace-${{ matrix.browser }}-${{ matrix.shard }}
+          path: test-results/
+          retention-days: 30
+
+  # ── Applitools gate ───────────────────────────────────────────────────────
+  # Links the PR review comment to the visual diff dashboard. The batch
+  # closes automatically when every test completes; this job exists so
+  # reviewers have one click from the PR to the dashboard.
+  applitools-gate:
+    name: Applitools visual gate
+    needs: test
+    runs-on: ubuntu-latest
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    steps:
+      - name: Surface dashboard link
+        env:
+          APPLITOOLS_API_KEY: ${{ secrets.APPLITOOLS_API_KEY }}
+          APPLITOOLS_BATCH_ID: ${{ github.run_id }}
+        run: |
+          if [ -z "${APPLITOOLS_API_KEY}" ]; then
+            echo "APPLITOOLS_API_KEY not set — skipping visual gate."
+            exit 0
+          fi
+          echo "Applitools batch: https://eyes.applitools.com/app/test-results/"
+          echo "Batch ID: ${APPLITOOLS_BATCH_ID}"
+
+  # ── Allure publish ────────────────────────────────────────────────────────
+  # Merges every shard's allure-results, generates one HTML report, and
+  # publishes to gh-pages. Shard artifacts follow the allure-* naming
+  # pattern so the merge step picks them up without enumeration.
+  publish-allure:
+    name: Publish Allure report
+    needs: test
+    runs-on: ubuntu-latest
+    if: ${{ always() && github.ref == 'refs/heads/main' }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all shard allure results
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+          pattern: allure-*
+
+      - name: Merge shards
+        run: |
+          mkdir -p allure-results
+          find ./artifacts -name 'allure-*' -type d -exec sh -c 'cp -r "$1"/* allure-results/ 2>/dev/null || true' _ {} \;
+
+      - name: Install Allure CLI
+        run: npm i -g allure-commandline
 
       - name: Generate Allure report
-        if: always()
-        run: npx allure-commandline generate allure-results --clean -o allure-report || true
+        run: allure generate allure-results --clean -o allure-report
 
-      - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
-        if: always()
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 14
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./allure-report
+          keep_files: false
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
 
-      - name: Upload Allure report
-        uses: actions/upload-artifact@v4
-        if: always()
+  # ── Notify on red ─────────────────────────────────────────────────────────
+  # Fires only when main goes red. Self-skips if SLACK_WEBHOOK_URL isn't set.
+  notify:
+    name: Notify on red
+    needs: [test, publish-allure]
+    if: failure() && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Slack ping
+        if: ${{ env.SLACK_WEBHOOK_URL != '' }}
+        uses: slackapi/slack-github-action@v1.26.0
         with:
-          name: allure-report
-          path: allure-report/
-          retention-days: 14
+          payload: |
+            {
+              "text": ":rotating_light: main is red — <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|run ${{ github.run_id }}>"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

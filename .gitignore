@@ -1,8 +1,26 @@
+# Dependencies
 node_modules/
+
+# Playwright
 playwright-report/
 test-results/
 .features-gen/
+
+# Allure
+allure-results/
+allure-report/
+
+# Env / secrets
 .env
+.env.*.local
+
+# Cached auth state (globalSetup writes here)
+.auth/
+
+# OS / editor
 .DS_Store
 *.log
 dist/
+
+# Build
+*.tsbuildinfo

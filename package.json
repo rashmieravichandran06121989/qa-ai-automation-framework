@@ -1,26 +1,67 @@
 {
-  "name": "applitools-playwright-smoke-tests",
+  "name": "qa-ai-automation-framework",
   "version": "1.0.0",
-  "description": "Playwright TypeScript smoke test suite with Applitools Eyes for practicesoftwaretesting.com",
+  "description": "AI-augmented Playwright + playwright-bdd + Applitools + Copilot framework against SauceDemo + OrangeHRM. Phase 1 deliverable of my AI-assisted testing upskilling plan.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rashmieravichandran06121989/qa-ai-automation-framework"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "test": "npx playwright test",
-    "test:smoke": "npx playwright test tests/smoke",
-    "test:headed": "npx playwright test --headed",
-    "test:report": "npx playwright show-report",
-    "test:bdd": "npx bddgen && npx playwright test --project='bdd:chromium'",
-    "test:bdd:headed": "npx playwright test --project='bdd:chromium' --headed",
+    "test:bdd": "npx bddgen && npx playwright test --project='bdd:chromium' --grep-invert @flaky",
+    "test:bdd:headed": "npx bddgen && npx playwright test --project='bdd:chromium' --grep-invert @flaky --headed",
+    "test:bdd:firefox": "npx bddgen && npx playwright test --project='bdd:firefox' --grep-invert @flaky",
+    "test:bdd:webkit": "npx bddgen && npx playwright test --project='bdd:webkit' --grep-invert @flaky",
+    "test:bdd:all": "npx bddgen && npx playwright test --project='bdd:chromium' --project='bdd:firefox' --project='bdd:webkit' --grep-invert @flaky",
+    "test:bdd:flaky": "npx bddgen && npx playwright test --project='bdd:chromium' --grep @flaky --workers=1",
+    "test:saucedemo": "npx bddgen && npx playwright test --project='bdd:chromium' --grep @SauceDemo",
+    "test:orangehrm": "npx bddgen && npx playwright test --project='bdd:chromium' --grep @OrangeHRM --grep-invert @flaky --workers=1",
     "test:api": "npx playwright test --project=api",
-    "test:api:verbose": "npx playwright test --project=api --reporter=list"
+    "test:api:verbose": "npx playwright test --project=api --reporter=list",
+    "test:report": "npx playwright show-report",
+    "report:allure": "allure generate allure-results --clean -o allure-report && allure open allure-report",
+    "report:allure:open": "allure open allure-report",
+    "report:allure:clean": "rimraf allure-results allure-report",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "format": "prettier --write \"**/*.{ts,js,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,js,json,md,yml,yaml}\"",
+    "typecheck": "tsc --noEmit",
+    "prepare": "husky || true"
   },
   "devDependencies": {
     "@faker-js/faker": "^10.4.0",
     "@playwright/test": "^1.44.0",
     "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "allure-commandline": "^2.29.0",
+    "allure-playwright": "^2.15.1",
     "dotenv": "^17.3.1",
+    "eslint": "^8.57.0",
+    "eslint-plugin-playwright": "^1.6.2",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.2",
     "playwright-bdd": "^8.5.0",
-    "typescript": "^5.4.0"
+    "prettier": "^3.2.5",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.4.0",
+    "zod": "^4.3.6"
   },
   "dependencies": {
     "@applitools/eyes-playwright": "^1.37.0"
+  },
+  "lint-staged": {
+    "*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
   }
 }

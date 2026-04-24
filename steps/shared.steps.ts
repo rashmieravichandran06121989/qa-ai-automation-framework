@@ -1,70 +1,57 @@
-import { expect } from '@playwright/test';
-import { Given, When, Then } from '../fixtures';
+import { Given } from '../fixtures';
+import { env } from '../config/env';
+import { credentials } from '../config/credentials';
 
-// Cart ID captured from POST /carts response after addToCart.
-// Needed to inject into sessionStorage before /checkout loads —
-// the app reads cart_id from sessionStorage which Playwright
-// does not persist between page navigations.
-let capturedCartId = '';
+// High-level steps shared across both targets. Anything specific to
+// one target lives under steps/saucedemo/ or steps/orangehrm/.
 
-Given('I navigate to the homepage', async ({ homePage }) => {
-  await homePage.open();
-});
+Given(
+  'User is logged in to SauceDemo as {string}',
+  async ({ sauceLoginPage, sauceInventoryPage }, username: string) => {
+    await sauceLoginPage.open();
+    await sauceLoginPage.loginAs(username, credentials.sauceDemo.password);
+    await sauceInventoryPage.expectLoaded();
+  },
+);
 
-When('I click on product number {int}', async ({ homePage }, index: number) => {
-  await homePage.clickProductByIndex(index - 1);
-});
+Given(
+  'User is on the SauceDemo inventory page',
+  async ({ sauceInventoryPage }) => {
+    await sauceInventoryPage.expectLoaded();
+  },
+);
 
-When('I add the product to the cart', async ({ productPage }) => {
-  capturedCartId = await productPage.addToCart();
-});
+Given(
+  'User is logged in to OrangeHRM as {string}',
+  async ({ page, orangeLoginPage, orangeDashboardPage }, username: string) => {
+    // Fast path — storageState (wired at project level) gives the
+    // context Admin's cookies. Hit /dashboard/index directly and skip
+    // UI login when the session is still valid. Saves ~15s per scenario.
+    const isAdmin = username === credentials.orangeHRM.admin.username;
+    if (isAdmin) {
+      await page.goto(
+        `${env.ORANGEHRM_BASE_URL}/web/index.php/dashboard/index`,
+      );
+      // 8s gives OrangeHRM enough time to paint the Dashboard heading
+      // on a cold context. 3s was racing the render and falling
+      // through to UI login even when storageState was valid, which
+      // caused downstream flake in PIM nav.
+      if (await orangeDashboardPage.isLoaded(8_000)) return;
+    }
 
-When('I navigate to the cart page', async ({ cartPage }) => {
-  await cartPage.open(capturedCartId);
-});
+    // Cookie jar missing, empty, or session rotated — fall through to
+    // UI login. openLoginPage's open() clears any stale dashboard
+    // redirect before filling the form.
+    await orangeLoginPage.open();
+    const password = isAdmin ? credentials.orangeHRM.admin.password : '';
+    await orangeLoginPage.loginAs(username, password);
+    await orangeDashboardPage.expectLoaded();
+  },
+);
 
-Then('the cart should contain at least {int} item', async ({ cartPage, page }, n: number) => {
-  // CartPage.open() has already waited for either the first row or the
-  // empty-cart banner. Here we just classify the outcome and assert.
-  if (await cartPage.emptyCartMessage.isVisible().catch(() => false)) {
-    throw new Error(
-      `Cart rendered empty on /checkout (URL: ${page.url()}). The cart_id ` +
-        'was likely not persisted in sessionStorage, or the GET /carts/{id} ' +
-        'API call failed.',
-    );
-  }
-
-  const count = await cartPage.getCartItemCount();
-  if (count < n) {
-    // Dump diagnostics so CI logs contain enough to debug without needing
-    // the trace.zip artifact. This is the hardest fail-mode to diagnose
-    // because neither the rows nor the empty-cart banner are visible.
-    const diag = await page.evaluate(() => {
-      const pick = (sel: string) =>
-        Array.from(document.querySelectorAll(sel))
-          .map((el) => (el as HTMLElement).innerText?.trim().slice(0, 80))
-          .filter(Boolean);
-      return {
-        url: location.href,
-        sessionStorage: { ...window.sessionStorage },
-        localStorage: { ...window.localStorage },
-        productTitles: pick('[data-test="product-title"]'),
-        rowCount: document.querySelectorAll('tr').length,
-        anyDataTests: Array.from(
-          new Set(
-            Array.from(document.querySelectorAll('[data-test]')).map((e) =>
-              e.getAttribute('data-test'),
-            ),
-          ),
-        ).sort(),
-        bodyPreview: document.body?.innerText?.slice(0, 600),
-      };
-    }).catch((e) => ({ error: String(e) }));
-
-    throw new Error(
-      `Cart contained ${count} items, expected >= ${n}. ` +
-        `Diagnostic:\n${JSON.stringify(diag, null, 2)}`,
-    );
-  }
-  expect(count).toBeGreaterThanOrEqual(n);
-});
+Given(
+  'User navigates to the {string} module',
+  async ({ orangeDashboardPage }, moduleName: string) => {
+    await orangeDashboardPage.navigateToModule(moduleName);
+  },
+);

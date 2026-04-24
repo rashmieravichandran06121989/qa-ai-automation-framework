@@ -1,0 +1,17 @@
+node_modules/
+dist/
+playwright-report/
+test-results/
+allure-results/
+allure-report/
+.features-gen/
+package-lock.json
+*.min.js
+*.min.css
+
+# Phase 2 QA Agent backend — preserved as-is, has its own style
+server/
+PHASE2.md
+
+# Tasks / docs — free-form
+tasks/

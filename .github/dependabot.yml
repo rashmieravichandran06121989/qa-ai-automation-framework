@@ -1,0 +1,32 @@
+version: 2
+updates:
+  # npm deps — weekly, group patch+minor so the queue doesn't explode.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Asia/Singapore
+    open-pull-requests-limit: 5
+    groups:
+      patch-and-minor:
+        update-types:
+          - patch
+          - minor
+    labels:
+      - dependencies
+      - automated
+
+  # Action versions — floating SHAs are a supply-chain risk; dependabot
+  # bumps the pinned versions while giving us a PR to review each time.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Asia/Singapore
+    labels:
+      - dependencies
+      - ci
