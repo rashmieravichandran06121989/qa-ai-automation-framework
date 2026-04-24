@@ -1,6 +1,9 @@
 version: 2
 updates:
-  # npm deps — weekly, group patch+minor so the queue doesn't explode.
+  # npm — weekly, grouped, patch + minor only.
+  # Major bumps get reviewed manually because they typically break the
+  # build (eslint 8→10 restructures flat-config, allure 2→3 changes the
+  # reporter API, etc.). If you want a major, bump it in a PR of your own.
   - package-ecosystem: npm
     directory: /
     schedule:
@@ -8,18 +11,22 @@ updates:
       day: monday
       time: '06:00'
       timezone: Asia/Singapore
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     groups:
       patch-and-minor:
         update-types:
           - patch
           - minor
+    ignore:
+      - dependency-name: '*'
+        update-types:
+          - version-update:semver-major
     labels:
       - dependencies
       - automated
 
-  # Action versions — floating SHAs are a supply-chain risk; dependabot
-  # bumps the pinned versions while giving us a PR to review each time.
+  # GitHub Actions — same rule. Action majors (checkout@4 → @6) sometimes
+  # rename inputs or change default behaviour; review them before taking.
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -27,6 +34,11 @@ updates:
       day: monday
       time: '06:00'
       timezone: Asia/Singapore
+    open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: '*'
+        update-types:
+          - version-update:semver-major
     labels:
       - dependencies
       - ci
