@@ -5,15 +5,14 @@
 ![Playwright](https://img.shields.io/badge/playwright-1.44-blue)
 ![Applitools](https://img.shields.io/badge/applitools-eyes--playwright-orange)
 ![Copilot](https://img.shields.io/badge/github-copilot-6e40c9)
-![Allure](https://img.shields.io/badge/allure-report-ff6f00)
 
-Playwright + playwright-bdd with Applitools Eyes and GitHub Copilot wired in. Built over a 10-day sprint as the Phase 1 output of my AI-assisted testing upskill plan. Runs the same way locally in VSCode, in Docker, or in GitHub Actions.
+Playwright + playwright-bdd with Applitools Eyes and GitHub Copilot wired in. Built over a 10-day sprint as the Phase 1 output of my AI-assisted testing upskill plan. Runs locally, in VSCode, or in GitHub Actions with the same commands.
 
 I picked two demo targets on purpose. SauceDemo because its `problem_user` and `visual_user` accounts ship with broken images and subtle layout drifts that DOM assertions can't see — exactly what Applitools is built for. OrangeHRM because it's closer to the enterprise HR flows I actually test at work: dropdown-heavy forms, search grids, angular-ish SPA timing quirks.
 
 ## What's in the box
 
-Eight Gherkin features — four for SauceDemo, four for OrangeHRM — driving nine Page Objects through playwright-bdd's scenario runner. An API layer against jsonplaceholder.typicode.com with Zod contract schemas (neither UI target exposes a stable public API, and reqres.in killed its free tier in 2024). Applitools Ultrafast Grid for cross-browser visual checks on a worker-scoped runner so batch rendering actually batches. Faker-backed test data. Allure reporting published to GitHub Pages on every main push. OrangeHRM login cached via `globalSetup` + project-level `storageState`, which drops per-scenario login time from ~20s to ~4s.
+Eight Gherkin features — four for SauceDemo, four for OrangeHRM — driving nine Page Objects through playwright-bdd's scenario runner. An API layer against jsonplaceholder.typicode.com for HTTP contract work (neither UI target exposes a stable public API). Applitools Ultrafast Grid for cross-browser visual checks. Faker-backed test data. OrangeHRM login cached via `globalSetup` + project-level `storageState`, which drops per-scenario login time from ~20s to ~4s.
 
 | Surface  | Target                       | Coverage                           | Visual | Wall-clock on chromium |
 | -------- | ---------------------------- | ---------------------------------- | ------ | ---------------------- |
@@ -31,8 +30,6 @@ Gherkin sits on top of the same Page Objects a native Playwright test would use.
 flowchart TD
     Dev[Developer in VSCode] -->|git push| GH[GitHub Actions]
     Dev -->|npm run test:bdd| Local[Local Playwright Runner]
-    Dev -->|docker compose run tests| Docker[Docker]
-
     GH --> Quality[Quality Gate<br/>lint · typecheck · format]
     Quality --> Matrix[Browser Matrix<br/>chromium · firefox · webkit]
 
@@ -45,7 +42,7 @@ flowchart TD
     Eyes -->|yes| Grid[Applitools Ultrafast Grid<br/>Chrome · Firefox · Safari Mobile]
     Eyes -->|no| Skip[Visual checks skipped<br/>functional assertions still run]
 
-    Sauce --> Report[Playwright HTML + Allure artifacts]
+    Sauce --> Report[Playwright HTML report artifact]
     Orange --> Report
     API --> Report
 
@@ -74,7 +71,7 @@ sequenceDiagram
 
 ## Stack
 
-TypeScript 5.4 on Node 20 LTS. Playwright 1.44 as the runner. playwright-bdd 8.5 compiles `.feature` files into Playwright tests so I keep native parallelism, traces, and the UI mode debugger. Applitools Eyes Ultrafast Grid for visual. `@faker-js/faker` for test data through builders in `fixtures/data-factory.ts`. Allure for reporting with Playwright's HTML report as the fallback. ESLint + Prettier on the quality side. Docker image pinned to `mcr.microsoft.com/playwright:v1.44.0-jammy`. GitHub Actions for CI running one job per browser on push to main.
+TypeScript 5.4 on Node 20 LTS. Playwright 1.44 as the runner. playwright-bdd 8.5 compiles `.feature` files into Playwright tests so I keep native parallelism, traces, and the UI mode debugger. Applitools Eyes Ultrafast Grid for visual. `@faker-js/faker` for test data through builders in `fixtures/data-factory.ts`. Playwright's built-in HTML reporter for test results. ESLint + Prettier on the quality side. GitHub Actions for CI running one job per browser on push to main.
 
 GitHub Copilot earns its line in the stack because of `.github/copilot-instructions.md` — a conventions file Copilot reads automatically, so every completion lands in project style instead of the generic default. The prompts I actually used are committed under `docs/copilot-prompts/` as the receipt.
 
@@ -113,19 +110,26 @@ code .
 Once VSCode is open, the Test Explorer on the left shows every scenario. Click the ▶ next to any one to run it in a live browser with traces recording. For the CLI:
 
 ```bash
-npm run test:bdd           # full BDD suite on chromium
-npm run test:bdd:headed    # same, but watch it run
-npm run test:saucedemo     # only @SauceDemo scenarios
-npm run test:orangehrm     # only @OrangeHRM scenarios (non-flaky)
-npm run test:bdd:flaky     # opt-in: the @flaky OrangeHRM Leave scenarios
-npm run test:api           # API suite, no browser, ~5s
-npm run report:allure      # generate + open the Allure dashboard
+npm run test:bdd     # full BDD suite on chromium
+npm run test:api     # API suite, no browser, ~5s
+npm run lint         # ESLint
+npm run typecheck    # tsc --noEmit
+npm run format:check # Prettier
 ```
 
-Or run the whole suite inside Docker:
+For a filtered BDD run, use Playwright's flags directly:
 
 ```bash
-docker compose run --rm tests
+npx bddgen && npx playwright test --project='bdd:chromium' --grep @SauceDemo
+npx bddgen && npx playwright test --project='bdd:chromium' --grep @OrangeHRM --workers=1
+npx bddgen && npx playwright test --project='bdd:chromium' --grep @flaky --workers=1
+npx playwright test --project='bdd:chromium' --headed
+```
+
+After a run, open the HTML report:
+
+```bash
+npx playwright show-report
 ```
 
 ## Screenshots
@@ -144,25 +148,21 @@ Capture these after a local run and drop them in `docs/screenshots/` with the ex
 
 ![Playwright report](docs/screenshots/03-playwright-report.png)
 
-### 4. Allure dashboard
+### 4. Applitools Eyes batch
 
-![Allure](docs/screenshots/04-allure-report.png)
+![Applitools dashboard](docs/screenshots/04-applitools-dashboard.png)
 
-### 5. Applitools Eyes batch
+### 5. Visual diff caught by Applitools
 
-![Applitools dashboard](docs/screenshots/05-applitools-dashboard.png)
+![Applitools diff](docs/screenshots/05-applitools-diff.png)
 
-### 6. Visual diff caught by Applitools
+### 6. Copilot suggesting a step def
 
-![Applitools diff](docs/screenshots/06-applitools-diff.png)
+![Copilot inline suggestion](docs/screenshots/06-copilot-suggestion.png)
 
-### 7. Copilot suggesting a step def
+### 7. CI run on GitHub Actions
 
-![Copilot inline suggestion](docs/screenshots/07-copilot-suggestion.png)
-
-### 8. CI run on GitHub Actions
-
-![CI matrix run](docs/screenshots/08-ci-run.png)
+![CI matrix run](docs/screenshots/07-ci-run.png)
 
 ## What I tried and dropped
 
@@ -228,15 +228,12 @@ qa-ai-automation-framework/
 │   ├── base-page.ts
 │   ├── saucedemo/                    # LoginPage, InventoryPage, CartPage, CheckoutPage
 │   └── orangehrm/                    # Login, Dashboard, PIM, AdminUsers, Leave
-├── scripts/allure-env.ts             # git SHA + branch → Allure env
 ├── steps/
 │   ├── saucedemo/
 │   ├── orangehrm/
 │   └── shared.steps.ts
 ├── tests/api/                        # jsonplaceholder REST tests
 ├── applitools.config.ts
-├── Dockerfile
-├── docker-compose.yml
 ├── playwright.config.ts
 └── tsconfig.json
 ```
@@ -245,7 +242,7 @@ qa-ai-automation-framework/
 
 One workflow under `.github/workflows/playwright.yml`. Runs only on push to main — no scheduled cron, no PR triggers — plus `workflow_dispatch` for manual runs from the Actions tab.
 
-Two jobs. **Quality gate** first — Prettier, ESLint, `tsc --noEmit` — blocks the matrix on style or type errors. **Test matrix** runs the BDD suite on chromium, firefox, and webkit in parallel, with Playwright binaries cached by version. API tests run once on the chromium leg. The Playwright HTML report and Allure results upload as artifacts on every run, successful or not.
+Two jobs. **Quality gate** first — Prettier, ESLint, `tsc --noEmit` — blocks the matrix on style or type errors. **Test matrix** runs the BDD suite on chromium, firefox, and webkit in parallel, with Playwright binaries cached by version. API tests run once on the chromium leg. The Playwright HTML report uploads as an artifact on every run, successful or not.
 
 Repo secrets: `APPLITOOLS_API_KEY` enables visual checks. Without it, CI stays green and the visual steps self-skip.
 
