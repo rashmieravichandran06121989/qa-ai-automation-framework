@@ -47,13 +47,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: CodeQL init
-        uses: github/codeql-action/init@v3
-        with:
-          languages: javascript-typescript
-
-      - name: CodeQL analyze
-        uses: github/codeql-action/analyze@v3
+      # CodeQL requires "Code scanning" to be enabled in repo Settings →
+      # Code security. Enable it once, then uncomment these two steps.
+      # - name: CodeQL init
+      #   uses: github/codeql-action/init@v3
+      #   with:
+      #     languages: javascript-typescript
+      #
+      # - name: CodeQL analyze
+      #   uses: github/codeql-action/analyze@v3
 
   # ── Quality gate ──────────────────────────────────────────────────────────
   # Blocks the matrix if lint/typecheck/format fails. Cheap, fast, deterministic.
