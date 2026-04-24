@@ -186,7 +186,10 @@ jobs:
     name: Publish Allure report
     needs: test
     runs-on: ubuntu-latest
-    if: ${{ always() && github.ref == 'refs/heads/main' }}
+    # Only publish when tests actually ran. Without this gate the job
+    # tries to generate a report from zero artifacts and exits 1,
+    # which cascades red into the Notify step on every upstream fail.
+    if: ${{ success() && github.ref == 'refs/heads/main' }}
     permissions:
       contents: write
     steps:

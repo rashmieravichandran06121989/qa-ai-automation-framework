@@ -34,6 +34,7 @@
     "prepare": "husky || true"
   },
   "devDependencies": {
+    "@applitools/eyes-playwright": "^1.37.0",
     "@faker-js/faker": "^10.4.0",
     "@playwright/test": "^1.44.0",
     "@types/node": "^20.0.0",
@@ -51,9 +52,6 @@
     "rimraf": "^5.0.5",
     "typescript": "^5.4.0",
     "zod": "^4.3.6"
-  },
-  "dependencies": {
-    "@applitools/eyes-playwright": "^1.37.0"
   },
   "lint-staged": {
     "*.ts": [
